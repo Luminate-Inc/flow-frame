@@ -1,0 +1,13 @@
+build-essential
+pkg-config
+libsdl2-dev
+libsdl2-ttf-dev
+libwayland-dev
+libdrm-dev
+libgl1-mesa-dev
+ffmpeg
+libavcodec-dev
+libavformat-dev
+libavutil-dev
+libswscale-dev
+ca-certificates 

@@ -1,0 +1,10 @@
+### Transferring mp4 file to mpeg
+```
+for file in *.mp4; do ffmpeg -i "$file" -c:v mpeg2video -qscale:v 2 -an "${file%.mp4}.mpeg"; done
+```
+
+### Deploying on raspberry pi needs to change the following:
+```
+// Use the Raspberry Pi's hardware decoder for HEVC (H.265)
+codec = avcodec_find_decoder_by_name("h265_v4l2m2m");
+```
