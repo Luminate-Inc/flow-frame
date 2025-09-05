@@ -3,8 +3,8 @@ package videoPlayer
 import (
 	"time"
 
-	"art-frame/pkg/mpeg"
-	"art-frame/pkg/sharedTypes"
+	"flow-frame/pkg/mpeg"
+	"flow-frame/pkg/sharedTypes"
 
 	"github.com/veandco/go-sdl2/sdl"
 )

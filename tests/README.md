@@ -63,7 +63,7 @@ This directory contains various test scripts for the Art Frame application.
 /usr/local/bin/tests/check-decoders.sh
 
 # Or via docker-compose
-docker-compose exec art-frame tests/check-decoders.sh
+docker-compose exec flow-frame tests/check-decoders.sh
 ```
 
 **What it does**:
@@ -92,10 +92,10 @@ docker-compose exec art-frame tests/check-decoders.sh
 
 ```bash
 # Check decoder availability
-docker-compose exec art-frame tests/check-decoders.sh
+docker-compose exec flow-frame tests/check-decoders.sh
 
 # Interactive bash session
-docker-compose exec art-frame /bin/bash
+docker-compose exec flow-frame /bin/bash
 # Then run any test script from /usr/local/bin/tests/
 ```
 

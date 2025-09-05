@@ -30,19 +30,19 @@ echo ""
 echo "6. Testing GPU device access..."
 echo "Checking if GPU devices are accessible in container:"
 
-if docker-compose exec art-frame test -c /dev/dri/card0; then
+if docker-compose exec flow-frame test -c /dev/dri/card0; then
     echo "✅ /dev/dri/card0 accessible"
 else
     echo "❌ /dev/dri/card0 not accessible"
 fi
 
-if docker-compose exec art-frame test -c /dev/vchiq; then
+if docker-compose exec flow-frame test -c /dev/vchiq; then
     echo "✅ /dev/vchiq accessible"
 else
     echo "❌ /dev/vchiq not accessible"
 fi
 
-if docker-compose exec art-frame test -c /dev/vcsm-cma; then
+if docker-compose exec flow-frame test -c /dev/vcsm-cma; then
     echo "✅ /dev/vcsm-cma accessible"
 else
     echo "❌ /dev/vcsm-cma not accessible"
@@ -51,11 +51,11 @@ fi
 echo ""
 echo "7. Checking user groups..."
 echo "Container user groups:"
-docker-compose exec art-frame groups
+docker-compose exec flow-frame groups
 
 echo ""
 echo "8. Testing GPU access permissions..."
-if docker-compose exec art-frame sh -c 'cat /dev/dri/card0 > /dev/null 2>&1'; then
+if docker-compose exec flow-frame sh -c 'cat /dev/dri/card0 > /dev/null 2>&1'; then
     echo "✅ GPU access permissions working"
 else
     echo "❌ GPU access permissions failed"
@@ -88,7 +88,7 @@ fi
 
 echo ""
 echo "11. Final status check..."
-if docker-compose ps art-frame | grep -q "Up"; then
+if docker-compose ps flow-frame | grep -q "Up"; then
     echo "✅ Container running"
     echo ""
     echo "=== Test Complete ==="

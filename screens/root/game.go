@@ -1,8 +1,8 @@
 package root
 
 import (
-	"art-frame/pkg/settings"
-	"art-frame/screens/videoPlayer"
+	"flow-frame/pkg/settings"
+	"flow-frame/screens/videoPlayer"
 	"fmt"
 	"log"
 	"math"
@@ -338,7 +338,7 @@ func (rg *RootGame) showIntervalSettings() {
 // showSystemSettings displays system settings submenu
 func (rg *RootGame) showSystemSettings() {
 	settingsItems := []SettingItem{
-		{Title: "Restart and check for updates", Value: "Restart the art-frame service"},
+		{Title: "Restart and check for updates", Value: "Restart the flow-frame service"},
 		{Title: "Back", Value: ""},
 	}
 
@@ -352,7 +352,7 @@ func (rg *RootGame) restartSystem() {
 	log.Println("Executing system restart command...")
 
 	// Execute the systemctl restart command
-	cmd := exec.Command("sudo", "systemctl", "restart", "art-frame")
+	cmd := exec.Command("sudo", "systemctl", "restart", "flow-frame")
 
 	// Run the command in the background since it will terminate this process
 	go func() {

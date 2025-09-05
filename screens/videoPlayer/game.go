@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	"art-frame/pkg/mpeg"
-	"art-frame/pkg/sharedTypes"
-	"art-frame/pkg/videoFs"
+	"flow-frame/pkg/mpeg"
+	"flow-frame/pkg/sharedTypes"
+	"flow-frame/pkg/videoFs"
 
 	"github.com/veandco/go-sdl2/sdl"
 )
@@ -44,7 +44,7 @@ func NewVideoPlayerGame() *VideoPlayerGame {
 			Id:          "1",
 			Title:       "Impressionism",
 			Description: "Light, color, and fleeting moments.",
-			Bucket:      "art-frame",
+			Bucket:      "flow-frame",
 			Folder:      "calm-abstract",
 			BounceLoop:  true,
 		},
@@ -52,7 +52,7 @@ func NewVideoPlayerGame() *VideoPlayerGame {
 			Id:          "2",
 			Title:       "Abstract",
 			Description: "Beyond the tangible world.",
-			Bucket:      "art-frame",
+			Bucket:      "flow-frame",
 			Folder:      "ai-gen",
 			BounceLoop:  true,
 		},

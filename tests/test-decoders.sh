@@ -21,9 +21,9 @@ test_decoder_config() {
     
     # Start with specific environment
     if [ -n "$env_vars" ]; then
-        eval "docker-compose run --rm -e $env_vars art-frame" &
+        eval "docker-compose run --rm -e $env_vars flow-frame" &
     else
-        docker-compose run --rm art-frame &
+        docker-compose run --rm flow-frame &
     fi
     
     local pid=$!

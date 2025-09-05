@@ -34,15 +34,15 @@ echo
 # 1. Check what SDL driver the service is actually using
 print_status "1. Checking current service configuration and logs..."
 echo "Service status:"
-sudo systemctl status art-frame --no-pager -l | grep -E "(Active|Main PID|art-frame)"
+sudo systemctl status flow-frame --no-pager -l | grep -E "(Active|Main PID|flow-frame)"
 
 echo
 echo "Recent service logs (looking for SDL driver info):"
-sudo journalctl -u art-frame -n 20 --no-pager | grep -E "(SDL|display|video|driver|resolution|window)" || echo "No SDL/display logs found"
+sudo journalctl -u flow-frame -n 20 --no-pager | grep -E "(SDL|display|video|driver|resolution|window)" || echo "No SDL/display logs found"
 
 echo
 echo "Last 10 service log lines:"
-sudo journalctl -u art-frame -n 10 --no-pager
+sudo journalctl -u flow-frame -n 10 --no-pager
 
 # 2. Check graphics hardware
 print_status "2. Checking graphics hardware and drivers..."
@@ -99,23 +99,23 @@ fi
 # 5. Test different SDL drivers manually
 print_status "5. Testing SDL drivers manually..."
 
-if [ -f "./art-frame" ]; then
+if [ -f "./flow-frame" ]; then
     echo "Testing different SDL drivers (each test runs for 5 seconds):"
     
     # Test KMS/DRM
     print_status "Testing KMS/DRM driver..."
-    timeout 5 sudo SDL_VIDEODRIVER=kmsdrm DISPLAY=:0 ./art-frame 2>&1 | head -5 || echo "KMS/DRM test failed or timed out"
+    timeout 5 sudo SDL_VIDEODRIVER=kmsdrm DISPLAY=:0 ./flow-frame 2>&1 | head -5 || echo "KMS/DRM test failed or timed out"
     
     # Test framebuffer
     print_status "Testing framebuffer driver..."
-    timeout 5 sudo SDL_VIDEODRIVER=fbcon DISPLAY=:0 ./art-frame 2>&1 | head -5 || echo "Framebuffer test failed or timed out"
+    timeout 5 sudo SDL_VIDEODRIVER=fbcon DISPLAY=:0 ./flow-frame 2>&1 | head -5 || echo "Framebuffer test failed or timed out"
     
     # Test software rendering
     print_status "Testing software rendering..."
-    timeout 5 sudo SDL_VIDEODRIVER=software DISPLAY=:0 ./art-frame 2>&1 | head -5 || echo "Software rendering test failed or timed out"
+    timeout 5 sudo SDL_VIDEODRIVER=software DISPLAY=:0 ./flow-frame 2>&1 | head -5 || echo "Software rendering test failed or timed out"
     
 else
-    print_error "art-frame executable not found in current directory"
+    print_error "flow-frame executable not found in current directory"
 fi
 
 # 6. Check for common Pi display issues
@@ -151,13 +151,13 @@ echo
 
 echo "IMMEDIATE TESTS TO TRY:"
 echo "1. Test with software rendering (guaranteed to work):"
-echo "   sudo systemctl stop art-frame"
-echo "   sudo SDL_VIDEODRIVER=software ./art-frame"
+echo "   sudo systemctl stop flow-frame"
+echo "   sudo SDL_VIDEODRIVER=software ./flow-frame"
 echo "   # If this works, the issue is graphics driver configuration"
 echo
 
 echo "2. Test framebuffer mode:"
-echo "   sudo SDL_VIDEODRIVER=fbcon ./art-frame"
+echo "   sudo SDL_VIDEODRIVER=fbcon ./flow-frame"
 echo "   # If this works, switch service to use fbcon"
 echo
 
@@ -178,8 +178,8 @@ echo
 
 echo "5. Update service to use working driver:"
 echo "   # If fbcon works:"
-echo "   sudo sed -i 's/SDL_VIDEODRIVER=kmsdrm/SDL_VIDEODRIVER=fbcon/' /etc/systemd/system/art-frame.service"
-echo "   sudo systemctl daemon-reload && sudo systemctl restart art-frame"
+echo "   sudo sed -i 's/SDL_VIDEODRIVER=kmsdrm/SDL_VIDEODRIVER=fbcon/' /etc/systemd/system/flow-frame.service"
+echo "   sudo systemctl daemon-reload && sudo systemctl restart flow-frame"
 echo
 
 print_success "Display diagnosis completed!"

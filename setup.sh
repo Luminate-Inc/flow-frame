@@ -59,7 +59,7 @@ detect_distro() {
     fi
 }
 
-# Function to fix file permissions in art-frame directory
+# Function to fix file permissions in flow-frame directory
 fix_file_permissions() {
     local target_user="$1"
     local art_frame_dir="$2"
@@ -148,7 +148,7 @@ get_actual_user() {
     print_status "  Current directory owner: $(stat -c '%U' . 2>/dev/null || stat -f '%Su' . 2>/dev/null || echo 'unknown')"
     print_status "Available users with UID >= 1000:"
     awk -F: '$3 >= 1000 && $1 != "nobody" && $1 != "UNKNOWN" {print "  - " $1 " (UID: " $3 ")"}' /etc/passwd 2>/dev/null || echo "  - (unable to list users)"
-    print_status "Please enter the username who should own the art-frame files (or press Enter for auto-detect):"
+    print_status "Please enter the username who should own the flow-frame files (or press Enter for auto-detect):"
     
     # Use timeout to avoid hanging in automated environments
     if command -v timeout >/dev/null 2>&1; then
@@ -172,7 +172,7 @@ get_actual_user() {
     # Last resort - suggest manual permission fix
     print_error "Could not determine a valid user for file ownership."
     print_status "You can manually fix permissions after setup with:"
-    print_status "  sudo chown -R USERNAME:USERNAME /path/to/art-frame"
+    print_status "  sudo chown -R USERNAME:USERNAME /path/to/flow-frame"
     print_status "Or set the user explicitly:"
     print_status "  SETUP_USER=\"username\" sudo ./setup.sh"
     
@@ -1484,7 +1484,7 @@ build_project() {
     go clean
     
     # Remove any existing executable
-    rm -f art-frame
+    rm -f flow-frame
     
     print_status "Compiling Go project with CGO enabled..."
     
@@ -1492,11 +1492,11 @@ build_project() {
     export CGO_ENABLED=1
     
     # Build the project with verbose output
-    if go build -v -o art-frame . 2>&1; then
+    if go build -v -o flow-frame . 2>&1; then
         # Verify executable was actually created
-        if [ -f "art-frame" ]; then
+        if [ -f "flow-frame" ]; then
             # Check if executable has correct permissions
-            if [ -x "art-frame" ]; then
+            if [ -x "flow-frame" ]; then
                 # Test that executable can be run (basic smoke test)
                 print_status "Testing executable..."
                 # Fix ownership and permissions for systemd compatibility
@@ -1509,22 +1509,22 @@ build_project() {
                 fi
                 
                 # Set proper ownership
-                chown "$target_user:$target_user" art-frame 2>/dev/null || true
+                chown "$target_user:$target_user" flow-frame 2>/dev/null || true
                 
                 # Set executable permissions (755 = rwxr-xr-x)
-                chmod 755 art-frame
+                chmod 755 flow-frame
                 
                 # Ensure directory permissions are correct
                 chmod 755 . 2>/dev/null || true
                 
                 print_status "Permission fix applied:"
-                print_status "  Owner: $(stat -c '%U:%G' art-frame 2>/dev/null || stat -f '%Su:%Sg' art-frame 2>/dev/null || echo 'unknown')"
-                print_status "  Permissions: $(stat -c '%a' art-frame 2>/dev/null || stat -f '%Lp' art-frame 2>/dev/null || echo 'unknown')"
+                print_status "  Owner: $(stat -c '%U:%G' flow-frame 2>/dev/null || stat -f '%Su:%Sg' flow-frame 2>/dev/null || echo 'unknown')"
+                print_status "  Permissions: $(stat -c '%a' flow-frame 2>/dev/null || stat -f '%Lp' flow-frame 2>/dev/null || echo 'unknown')"
                 
-                if timeout 5 ./art-frame --version 2>/dev/null || timeout 5 ./art-frame --help 2>/dev/null || [ $? -eq 124 ]; then
+                if timeout 5 ./flow-frame --version 2>/dev/null || timeout 5 ./flow-frame --help 2>/dev/null || [ $? -eq 124 ]; then
                     print_success "Project built and tested successfully"
-                    print_status "Executable location: $(pwd)/art-frame"
-                    print_status "Executable size: $(ls -lh art-frame | awk '{print $5}')"
+                    print_status "Executable location: $(pwd)/flow-frame"
+                    print_status "Executable size: $(ls -lh flow-frame | awk '{print $5}')"
                     return 0
                 else
                     print_warning "Executable built but failed basic test"
@@ -1542,13 +1542,13 @@ build_project() {
                 fi
                 
                 # Set proper ownership and permissions
-                chown "$target_user:$target_user" art-frame 2>/dev/null || true
-                chmod 755 art-frame
+                chown "$target_user:$target_user" flow-frame 2>/dev/null || true
+                chmod 755 flow-frame
                 chmod 755 . 2>/dev/null || true
                 
                 print_success "Fixed executable permissions"
-                print_status "  Owner: $(stat -c '%U:%G' art-frame 2>/dev/null || stat -f '%Su:%Sg' art-frame 2>/dev/null || echo 'unknown')"
-                print_status "  Permissions: $(stat -c '%a' art-frame 2>/dev/null || stat -f '%Lp' art-frame 2>/dev/null || echo 'unknown')"
+                print_status "  Owner: $(stat -c '%U:%G' flow-frame 2>/dev/null || stat -f '%Su:%Sg' flow-frame 2>/dev/null || echo 'unknown')"
+                print_status "  Permissions: $(stat -c '%a' flow-frame 2>/dev/null || stat -f '%Lp' flow-frame 2>/dev/null || echo 'unknown')"
                 return 0
             fi
         else
@@ -1565,7 +1565,7 @@ build_project() {
 
 # Function to check if systemd service exists
 service_exists() {
-    systemctl list-unit-files | grep -q "art-frame.service"
+    systemctl list-unit-files | grep -q "flow-frame.service"
 }
 
 # Function to manage existing systemd service
@@ -1582,18 +1582,18 @@ manage_existing_service() {
     case "$choice" in
         1)
             print_status "Stopping and removing existing service..."
-            sudo systemctl stop art-frame 2>/dev/null || true
-            sudo systemctl disable art-frame 2>/dev/null || true
-            sudo rm -f /etc/systemd/system/art-frame.service
+            sudo systemctl stop flow-frame 2>/dev/null || true
+            sudo systemctl disable flow-frame 2>/dev/null || true
+            sudo rm -f /etc/systemd/system/flow-frame.service
             sudo systemctl daemon-reload
             print_success "Existing service removed. Installing new service..."
             return 0  # Proceed with installation
             ;;
         2)
             print_status "Removing systemd service..."
-            sudo systemctl stop art-frame 2>/dev/null || true
-            sudo systemctl disable art-frame 2>/dev/null || true
-            sudo rm -f /etc/systemd/system/art-frame.service
+            sudo systemctl stop flow-frame 2>/dev/null || true
+            sudo systemctl disable flow-frame 2>/dev/null || true
+            sudo rm -f /etc/systemd/system/flow-frame.service
             sudo systemctl daemon-reload
             print_success "Systemd service removed successfully"
             return 1  # Don't install
@@ -1656,17 +1656,17 @@ verify_executable() {
 create_systemd_service() {
     print_status "Creating and installing systemd service..."
     
-    local service_file="art-frame.service"
+    local service_file="flow-frame.service"
     local current_dir=$(pwd)
     print_status "Current directory: $current_dir"
     print_status "Current directory files: $(ls -la $current_dir)"
     local current_user=$(whoami)
-    local executable_path="$current_dir/art-frame"
+    local executable_path="$current_dir/flow-frame"
     
     # First, verify the executable exists and works
     if ! verify_executable "$executable_path"; then
         print_error "Cannot create systemd service - executable verification failed"
-        print_status "Build the project first with: go build -o art-frame ."
+        print_status "Build the project first with: go build -o flow-frame ."
         return 1
     fi
     
@@ -1729,7 +1729,7 @@ Environment=HOME=$current_dir
 EnvironmentFile=$current_dir/.env
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=art-frame
+SyslogIdentifier=flow-frame
 
 # Relaxed security settings for /root access
 NoNewPrivileges=false
@@ -1769,15 +1769,15 @@ EOF
     
     # Verify the installed service file
     print_status "Verifying installed service file..."
-    if [ -f "/etc/systemd/system/art-frame.service" ]; then
+    if [ -f "/etc/systemd/system/flow-frame.service" ]; then
         print_status "Installed service file contents:"
-        cat /etc/systemd/system/art-frame.service | while IFS= read -r line; do
+        cat /etc/systemd/system/flow-frame.service | while IFS= read -r line; do
             print_status "  $line"
         done
         
         # Check if the ExecStartPre and ExecStart paths match what we expect
-        installed_exec_start_pre=$(grep "^ExecStartPre=" /etc/systemd/system/art-frame.service | cut -d'=' -f2)
-        installed_exec_start=$(grep "^ExecStart=" /etc/systemd/system/art-frame.service | cut -d'=' -f2)
+        installed_exec_start_pre=$(grep "^ExecStartPre=" /etc/systemd/system/flow-frame.service | cut -d'=' -f2)
+        installed_exec_start=$(grep "^ExecStart=" /etc/systemd/system/flow-frame.service | cut -d'=' -f2)
         local wrapper_path="$current_dir/check-updates-wrapper.sh"
         if [ "$installed_exec_start_pre" = "$wrapper_path" ] && [ "$installed_exec_start" = "$executable_path" ]; then
             print_success "Installed service ExecStartPre and ExecStart paths are correct"
@@ -1791,7 +1791,7 @@ EOF
             print_status "  Found ExecStart: $installed_exec_start"
         fi
     else
-        print_error "Service file not found at /etc/systemd/system/art-frame.service"
+        print_error "Service file not found at /etc/systemd/system/flow-frame.service"
     fi
     
     # Reload systemd daemon
@@ -1799,13 +1799,13 @@ EOF
     sudo systemctl daemon-reload
     
     # Enable the service for startup
-    print_status "Enabling art-frame service for startup..."
-    sudo systemctl enable art-frame
+    print_status "Enabling flow-frame service for startup..."
+    sudo systemctl enable flow-frame
     
     # Final verification before starting service
     print_status "Final pre-start verification..."
-    installed_exec_start_pre=$(grep "^ExecStartPre=" /etc/systemd/system/art-frame.service | cut -d'=' -f2)
-    installed_exec_start=$(grep "^ExecStart=" /etc/systemd/system/art-frame.service | cut -d'=' -f2)
+    installed_exec_start_pre=$(grep "^ExecStartPre=" /etc/systemd/system/flow-frame.service | cut -d'=' -f2)
+    installed_exec_start=$(grep "^ExecStart=" /etc/systemd/system/flow-frame.service | cut -d'=' -f2)
     local wrapper_path="$current_dir/check-updates-wrapper.sh"
     
     if [ -f "$installed_exec_start_pre" ] && [ -f "$installed_exec_start" ]; then
@@ -1830,9 +1830,9 @@ EOF
         
         # Create a wrapper script as backup solution
         print_status "Creating systemd wrapper script as backup..."
-        cat > "$current_dir/art-frame-wrapper.sh" << EOF
+        cat > "$current_dir/flow-frame-wrapper.sh" << EOF
 #!/bin/bash
-# Systemd wrapper script for art-frame
+# Systemd wrapper script for flow-frame
 cd "$current_dir"
 export HOME="$current_dir"
 export DISPLAY="${DETECTED_DISPLAY:-:0}"
@@ -1840,13 +1840,13 @@ export SDL_VIDEODRIVER="${DETECTED_SDL_DRIVER:-kmsdrm}"
 exec "$executable_path" "\$@"
 EOF
         
-        chmod +x "$current_dir/art-frame-wrapper.sh"
-        chown root:root "$current_dir/art-frame-wrapper.sh" 2>/dev/null || true
+        chmod +x "$current_dir/flow-frame-wrapper.sh"
+        chown root:root "$current_dir/flow-frame-wrapper.sh" 2>/dev/null || true
         
-        print_status "Wrapper script created: $current_dir/art-frame-wrapper.sh"
+        print_status "Wrapper script created: $current_dir/flow-frame-wrapper.sh"
         
         # Test the wrapper
-        if timeout 3 "$current_dir/art-frame-wrapper.sh" --version 2>/dev/null || timeout 3 "$current_dir/art-frame-wrapper.sh" --help 2>/dev/null || [ $? -eq 124 ]; then
+        if timeout 3 "$current_dir/flow-frame-wrapper.sh" --version 2>/dev/null || timeout 3 "$current_dir/flow-frame-wrapper.sh" --help 2>/dev/null || [ $? -eq 124 ]; then
             print_success "Wrapper script test passed"
         else
             print_warning "Wrapper script test failed"
@@ -1863,18 +1863,18 @@ EOF
     fi
     
     # Start the service immediately
-    print_status "Starting art-frame service..."
-    sudo systemctl start art-frame
+    print_status "Starting flow-frame service..."
+    sudo systemctl start flow-frame
     
     # Check service status
-    if sudo systemctl is-active --quiet art-frame; then
+    if sudo systemctl is-active --quiet flow-frame; then
         print_success "Art Frame service is running successfully!"
         
         # Apply preventive fix for common HOME directory permission issue
         print_status "Applying preventive fix for HOME directory permission issues..."
-        if sudo sed -i '/Environment=HOME=/d' /etc/systemd/system/art-frame.service 2>/dev/null; then
+        if sudo sed -i '/Environment=HOME=/d' /etc/systemd/system/flow-frame.service 2>/dev/null; then
             sudo systemctl daemon-reload
-            sudo systemctl restart art-frame
+            sudo systemctl restart flow-frame
             print_success "Applied HOME directory permission fix"
         else
             print_warning "Could not apply HOME directory fix - service may still work"
@@ -1883,33 +1883,33 @@ EOF
         # Show current service status
         echo
         print_status "Current service status:"
-        sudo systemctl status art-frame --no-pager -l
+        sudo systemctl status flow-frame --no-pager -l
     else
         print_warning "Service may not be running. Diagnosing..."
         
         # Show detailed status first
         print_status "Service status check:"
-        sudo systemctl status art-frame --no-pager -l || true
+        sudo systemctl status flow-frame --no-pager -l || true
         
         # Show recent logs
         print_status "Recent service logs:"
-        sudo journalctl -u art-frame --no-pager -l -n 10 || true
+        sudo journalctl -u flow-frame --no-pager -l -n 10 || true
         
         print_status "Attempting to start the service..."
-        sudo systemctl start art-frame
+        sudo systemctl start flow-frame
         sleep 3
         
-        if sudo systemctl is-active --quiet art-frame; then
+        if sudo systemctl is-active --quiet flow-frame; then
             print_success "Service started successfully!"
         else
             print_error "Service failed to start. Detailed diagnostics:"
             
             # More detailed diagnostics
             print_status "Service status after start attempt:"
-            sudo systemctl status art-frame --no-pager -l || true
+            sudo systemctl status flow-frame --no-pager -l || true
             
             print_status "Latest service logs:"
-            sudo journalctl -u art-frame --no-pager -l -n 20 || true
+            sudo journalctl -u flow-frame --no-pager -l -n 20 || true
             
             print_status "File system check:"
             print_status "  Executable still exists: $([ -f "$executable_path" ] && echo "YES" || echo "NO")"
@@ -1944,10 +1944,10 @@ EOF
              print_status "SOLUTION: Use wrapper script approach:"
              echo
              print_status "1. Edit the systemd service to use wrapper script:"
-             echo "   sudo nano /etc/systemd/system/art-frame.service"
+             echo "   sudo nano /etc/systemd/system/flow-frame.service"
              echo
              print_status "2. Change the ExecStart line to:"
-             echo "   ExecStart=$current_dir/art-frame-wrapper.sh"
+             echo "   ExecStart=$current_dir/flow-frame-wrapper.sh"
              echo
              print_status "3. Remove or disable security restrictions:"
              echo "   # Comment out or change these lines:"
@@ -1957,19 +1957,19 @@ EOF
              echo
              print_status "4. Reload and restart:"
              echo "   sudo systemctl daemon-reload"
-             echo "   sudo systemctl restart art-frame"
-             echo "   sudo systemctl status art-frame"
+             echo "   sudo systemctl restart flow-frame"
+             echo "   sudo systemctl status flow-frame"
         fi
     fi
     
     print_success "Systemd service installed and configured"
     print_status "Service management commands:"
-    echo "  - Check status: sudo systemctl status art-frame"
-    echo "  - Stop service: sudo systemctl stop art-frame"
-    echo "  - Start service: sudo systemctl start art-frame"
-    echo "  - Restart service: sudo systemctl restart art-frame"
-    echo "  - View logs: sudo journalctl -u art-frame -f"
-    echo "  - Disable startup: sudo systemctl disable art-frame"
+    echo "  - Check status: sudo systemctl status flow-frame"
+    echo "  - Stop service: sudo systemctl stop flow-frame"
+    echo "  - Start service: sudo systemctl start flow-frame"
+    echo "  - Restart service: sudo systemctl restart flow-frame"
+    echo "  - View logs: sudo journalctl -u flow-frame -f"
+    echo "  - Disable startup: sudo systemctl disable flow-frame"
 }
 
 # Function to provide recovery options when build fails
@@ -1982,10 +1982,10 @@ provide_recovery_options() {
     echo "   cd $(pwd)"
     echo "   export CGO_ENABLED=1"
     echo "   go clean"
-    echo "   go build -v -o art-frame ."
+    echo "   go build -v -o flow-frame ."
     echo "   # Fix permissions for systemd:"
-    echo "   sudo chown root:root art-frame"
-    echo "   sudo chmod 755 art-frame"
+    echo "   sudo chown root:root flow-frame"
+    echo "   sudo chmod 755 flow-frame"
     echo "   sudo chmod 755 ."
     echo
     print_status "2. Debug Build Issues:"
@@ -2002,25 +2002,25 @@ provide_recovery_options() {
     print_status "4. Environment Variables (if needed):"
     echo "   export CGO_CFLAGS=\"-I/usr/include/ffmpeg\""
     echo "   export CGO_LDFLAGS=\"-L/usr/lib -lavformat -lavcodec -lavutil\""
-    echo "   go build -o art-frame ."
+    echo "   go build -o flow-frame ."
     echo "   # Fix permissions:"
-    echo "   sudo chown root:root art-frame && sudo chmod 755 art-frame"
+    echo "   sudo chown root:root flow-frame && sudo chmod 755 flow-frame"
     echo
     print_status "5. Continue Setup Without Systemd Service:"
     echo "   - Fix build issues manually"
-    echo "   - Run: ./art-frame to test"
-    echo "   - Install service later: sudo systemctl --user enable art-frame.service"
+    echo "   - Run: ./flow-frame to test"
+    echo "   - Install service later: sudo systemctl --user enable flow-frame.service"
     echo
     print_status "6. Display Troubleshooting (if app runs but no display):"
     echo "   # Test different SDL drivers (in order of preference):"
     echo "   # 1. KMS/DRM (RECOMMENDED - modern, hardware-accelerated):"
-    echo "   export SDL_VIDEODRIVER=kmsdrm && ./art-frame"
+    echo "   export SDL_VIDEODRIVER=kmsdrm && ./flow-frame"
     echo "   # 2. X11 (if X server running):"
-    echo "   export SDL_VIDEODRIVER=x11 && ./art-frame"
+    echo "   export SDL_VIDEODRIVER=x11 && ./flow-frame"
     echo "   # 3. Software rendering (works everywhere):"
-    echo "   export SDL_VIDEODRIVER=software && ./art-frame"
+    echo "   export SDL_VIDEODRIVER=software && ./flow-frame"
     echo "   # 4. Framebuffer (LEGACY - avoid if possible):"
-    echo "   export SDL_VIDEODRIVER=fbcon && ./art-frame"
+    echo "   export SDL_VIDEODRIVER=fbcon && ./flow-frame"
     echo "   # Check graphics capabilities:"
     echo "   ls -la /dev/dri/*"
     echo "   lsmod | grep drm"
@@ -2038,11 +2038,11 @@ provide_recovery_options() {
     echo "   ls -la /sys/class/drm/"
     echo "   sudo ./setup.sh --test-kmsdrm"
     echo "   # Test KMS/DRM driver (RECOMMENDED):"
-    echo "   export SDL_VIDEODRIVER=kmsdrm && ./art-frame"
+    echo "   export SDL_VIDEODRIVER=kmsdrm && ./flow-frame"
     echo "   # If KMS/DRM fails, check framebuffer (LEGACY fallback):"
     echo "   ls -la /dev/fb*"
     echo "   sudo ./setup.sh --diagnose-framebuffer"
-    echo "   export SDL_VIDEODRIVER=fbcon && ./art-frame"
+    echo "   export SDL_VIDEODRIVER=fbcon && ./flow-frame"
     echo "   # NOTE: fbcon is 1990s technology - prefer kmsdrm when possible"
     echo "   # Fix rainbow flashes (power/graphics issues):"
     echo "   sudo ./setup.sh --fix-rainbow"
@@ -2115,17 +2115,17 @@ try_alternative_build() {
     # Method 1: Disable CGO and try pure Go build (if possible)
     print_status "Trying with CGO disabled..."
     export CGO_ENABLED=0
-    if go build -o art-frame-nocgo . 2>/dev/null; then
+    if go build -o flow-frame-nocgo . 2>/dev/null; then
         print_warning "Built with CGO disabled (may lack some features)"
-        mv art-frame-nocgo art-frame
+        mv flow-frame-nocgo flow-frame
         
         # Apply the same permission fixes
         local target_user="${SUDO_USER:-$(whoami)}"
         if [ "$target_user" = "root" ] || [ "$target_user" = "UNKNOWN" ]; then
             target_user="root"
         fi
-        chown "$target_user:$target_user" art-frame 2>/dev/null || true
-        chmod 755 art-frame
+        chown "$target_user:$target_user" flow-frame 2>/dev/null || true
+        chmod 755 flow-frame
         chmod 755 . 2>/dev/null || true
         
         print_status "Alternative build permissions fixed"
@@ -2137,14 +2137,14 @@ try_alternative_build() {
     export CGO_ENABLED=1
     export CGO_CFLAGS=""
     export CGO_LDFLAGS=""
-    if go build -o art-frame . 2>/dev/null; then
+    if go build -o flow-frame . 2>/dev/null; then
         # Apply permission fixes
         local target_user="${SUDO_USER:-$(whoami)}"
         if [ "$target_user" = "root" ] || [ "$target_user" = "UNKNOWN" ]; then
             target_user="root"
         fi
-        chown "$target_user:$target_user" art-frame 2>/dev/null || true
-        chmod 755 art-frame
+        chown "$target_user:$target_user" flow-frame 2>/dev/null || true
+        chmod 755 flow-frame
         chmod 755 . 2>/dev/null || true
         
         print_success "Alternative build method successful"
@@ -2155,14 +2155,14 @@ try_alternative_build() {
     print_status "Trying container-friendly build..."
     export GOOS=linux
     export GOARCH=amd64
-    if go build -a -installsuffix cgo -o art-frame . 2>/dev/null; then
+    if go build -a -installsuffix cgo -o flow-frame . 2>/dev/null; then
         # Apply permission fixes
         local target_user="${SUDO_USER:-$(whoami)}"
         if [ "$target_user" = "root" ] || [ "$target_user" = "UNKNOWN" ]; then
             target_user="root"
         fi
-        chown "$target_user:$target_user" art-frame 2>/dev/null || true
-        chmod 755 art-frame
+        chown "$target_user:$target_user" flow-frame 2>/dev/null || true
+        chmod 755 flow-frame
         chmod 755 . 2>/dev/null || true
         
         print_success "Container-friendly build successful"
@@ -2178,10 +2178,10 @@ provide_manual_service_instructions() {
     print_status "Manual systemd service installation instructions:"
     echo
     print_status "1. First ensure executable exists:"
-    echo "   ls -la $(pwd)/art-frame"
+    echo "   ls -la $(pwd)/flow-frame"
     echo
     print_status "2. Create service file manually:"
-    echo "   sudo nano /etc/systemd/system/art-frame.service"
+    echo "   sudo nano /etc/systemd/system/flow-frame.service"
     echo
     print_status "3. Use this service file content:"
     cat << EOF
@@ -2195,7 +2195,7 @@ Type=simple
 User=$(whoami)
 Group=$(whoami)
 WorkingDirectory=$(pwd)
-ExecStart=$(pwd)/art-frame
+ExecStart=$(pwd)/flow-frame
 Restart=always
 RestartSec=10
 Environment=DISPLAY=:0
@@ -2216,9 +2216,9 @@ EOF
     echo
     print_status "4. Enable and start service:"
     echo "   sudo systemctl daemon-reload"
-    echo "   sudo systemctl enable art-frame"
-    echo "   sudo systemctl start art-frame"
-    echo "   sudo systemctl status art-frame"
+    echo "   sudo systemctl enable flow-frame"
+    echo "   sudo systemctl start flow-frame"
+    echo "   sudo systemctl status flow-frame"
 }
 
 # Main setup function
@@ -2370,13 +2370,13 @@ main() {
                         echo "     - Set ART_FRAME_S3_BUCKET to your S3 bucket name"
                         echo "     - Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
                         echo "  2. Upload your codebase to S3: ./upload-to-s3.sh your-bucket-name"
-                        echo "  3. Restart the service: sudo systemctl restart art-frame"
-                        echo "  4. View logs: sudo journalctl -u art-frame -f"
+                        echo "  3. Restart the service: sudo systemctl restart flow-frame"
+                        echo "  4. View logs: sudo journalctl -u flow-frame -f"
                         print_status "Auto-update is now enabled! The service will check for updates on startup."
                     else
                         echo "  1. Edit .env file with your specific configuration: nano .env"
-                        echo "  2. Restart the service after editing .env: sudo systemctl restart art-frame"
-                        echo "  3. View logs: sudo journalctl -u art-frame -f"
+                        echo "  2. Restart the service after editing .env: sudo systemctl restart flow-frame"
+                        echo "  3. View logs: sudo journalctl -u flow-frame -f"
                     fi
                 else
                     print_warning "Systemd service creation failed"
@@ -2387,7 +2387,7 @@ main() {
                 print_status "Next steps:"
                 echo "  1. Edit .env file with your specific configuration: nano .env"
                 echo "  2. Source your shell configuration: source ~/.bashrc"
-                echo "  3. Run the application: ./art-frame"
+                echo "  3. Run the application: ./flow-frame"
             fi
         else
             if [ "$SYSTEMD_ONLY" = true ]; then
@@ -2404,8 +2404,8 @@ main() {
                     echo
                     print_status "Next steps:"
                     echo "  1. Edit .env file with your specific configuration: nano .env"
-                    echo "  2. Restart the service after editing .env: sudo systemctl restart art-frame"
-                    echo "  3. View logs: sudo journalctl -u art-frame -f"
+                    echo "  2. Restart the service after editing .env: sudo systemctl restart flow-frame"
+                    echo "  3. View logs: sudo journalctl -u flow-frame -f"
                 else
                     print_error "Systemd service installation failed"
                     exit 1
@@ -2426,8 +2426,8 @@ main() {
                         echo
                         print_status "Next steps:"
                         echo "  1. Edit .env file with your specific configuration: nano .env"
-                        echo "  2. Restart the service after editing .env: sudo systemctl restart art-frame"
-                        echo "  3. View logs: sudo journalctl -u art-frame -f"
+                        echo "  2. Restart the service after editing .env: sudo systemctl restart flow-frame"
+                        echo "  3. View logs: sudo journalctl -u flow-frame -f"
                     else
                         print_warning "Systemd service creation failed"
                         provide_manual_service_instructions
@@ -2445,8 +2445,8 @@ main() {
         echo
         print_status "Next steps:"
         echo "  1. Fix build issues manually (see recovery options above)"
-        echo "  2. Test build with: go build -o art-frame ."
-        echo "  3. Once built, run: ./art-frame"
+        echo "  2. Test build with: go build -o flow-frame ."
+        echo "  3. Once built, run: ./flow-frame"
         echo "  4. Install systemd service later: sudo ./setup.sh"
         echo
         provide_recovery_options
@@ -2461,8 +2461,8 @@ main() {
             print_warning "IMPORTANT: Raspberry Pi graphics configuration was updated!"
             print_warning "A reboot is required for graphics changes to take effect."
             print_status "After reboot, check if the service is working:"
-            echo "  sudo systemctl status art-frame"
-            echo "  sudo journalctl -u art-frame -f"
+            echo "  sudo systemctl status flow-frame"
+            echo "  sudo journalctl -u flow-frame -f"
             echo
             print_status "Do you want to reboot now? (y/n)"
             read -r reboot_choice

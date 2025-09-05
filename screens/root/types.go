@@ -1,8 +1,8 @@
 package root
 
 import (
-	"art-frame/pkg/settings"
-	"art-frame/screens/videoPlayer"
+	"flow-frame/pkg/settings"
+	"flow-frame/screens/videoPlayer"
 
 	"github.com/veandco/go-sdl2/sdl"
 )

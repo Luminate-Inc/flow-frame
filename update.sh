@@ -13,8 +13,8 @@
 #   AWS_DEFAULT_REGION    - AWS region (default: us-east-1)
 #
 # Optional Environment Variables:
-#   ART_FRAME_UPDATE_LOG  - Log file location (default: /var/log/art-frame-update.log)
-#   ART_FRAME_BACKUP_DIR  - Backup directory (default: /var/backups/art-frame)
+#   ART_FRAME_UPDATE_LOG  - Log file location (default: /var/log/flow-frame-update.log)
+#   ART_FRAME_BACKUP_DIR  - Backup directory (default: /var/backups/flow-frame)
 
 set -e
 
@@ -27,10 +27,10 @@ NC='\033[0m'
 
 # Configuration
 PROJECT_DIR="$(pwd)"
-TEMP_DIR="/tmp/art-frame-update"
+TEMP_DIR="/tmp/flow-frame-update"
 VERSION_FILE="$PROJECT_DIR/.current_version"
-LOG_FILE="${ART_FRAME_UPDATE_LOG:-/var/log/art-frame-update.log}"
-BACKUP_DIR="${ART_FRAME_BACKUP_DIR:-/var/backups/art-frame}"
+LOG_FILE="${ART_FRAME_UPDATE_LOG:-/var/log/flow-frame-update.log}"
+BACKUP_DIR="${ART_FRAME_BACKUP_DIR:-/var/backups/flow-frame}"
 FORCE_UPDATE=false
 CHECK_ONLY=false
 
@@ -306,19 +306,19 @@ print_success "Archive integrity verified"
 print_status "Creating backup of current installation..."
 mkdir -p "$BACKUP_DIR"
 BACKUP_TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_PATH="$BACKUP_DIR/art-frame-backup-$BACKUP_TIMESTAMP.tar.gz"
+BACKUP_PATH="$BACKUP_DIR/flow-frame-backup-$BACKUP_TIMESTAMP.tar.gz"
 
 # Check if we're running as part of the service itself
-if [ -n "$SYSTEMD_EXEC_PID" ] || [ "$$" = "$(pgrep -f 'art-frame.service' | head -1)" ]; then
+if [ -n "$SYSTEMD_EXEC_PID" ] || [ "$$" = "$(pgrep -f 'flow-frame.service' | head -1)" ]; then
     print_warning "Update script is running as part of the service - cannot stop service"
     print_status "Skipping service stop/restart - update will be applied on next restart"
     SERVICE_WAS_RUNNING=false
     SKIP_SERVICE_RESTART=true
 else
     # Stop the service before update
-    print_status "Stopping art-frame service..."
-    if systemctl is-active --quiet art-frame 2>/dev/null; then
-        sudo systemctl stop art-frame
+    print_status "Stopping flow-frame service..."
+    if systemctl is-active --quiet flow-frame 2>/dev/null; then
+        sudo systemctl stop flow-frame
         print_success "Service stopped"
         SERVICE_WAS_RUNNING=true
         SKIP_SERVICE_RESTART=false
@@ -330,7 +330,7 @@ else
 fi
 
 # Create backup (excluding the binary)
-tar --exclude='./art-frame' \
+tar --exclude='./flow-frame' \
     --exclude='./.git' \
     --exclude='./tmp' \
     -czf "$BACKUP_PATH" \
@@ -357,7 +357,7 @@ done
 
 # Remove old files (except preserved ones and the binary)
 find "$PROJECT_DIR" -mindepth 1 -maxdepth 1 \
-    ! -name "art-frame" \
+    ! -name "flow-frame" \
     ! -name ".env" \
     ! -name "settings.json" \
     ! -name ".current_version" \
@@ -443,7 +443,7 @@ print_status "Build started at: $(date)"
 # Run build without timeout to prevent systemd timeout issues
 # Use build cache and parallel compilation for better performance
 print_status "Starting build with verbose output..."
-if ! go build -v -ldflags="-s -w" -trimpath -o art-frame .; then
+if ! go build -v -ldflags="-s -w" -trimpath -o flow-frame .; then
     print_error "Failed to build new binary!"
     print_status "Build failed at: $(date)"
     print_status "Attempting to restore from backup..."
@@ -460,7 +460,7 @@ print_status "Build completed at: $(date)"
 print_success "Binary built successfully"
 
 # Set proper permissions
-chmod +x "$PROJECT_DIR/art-frame"
+chmod +x "$PROJECT_DIR/flow-frame"
 
 # Clean up
 rm -rf "$TEMP_DIR"

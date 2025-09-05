@@ -55,10 +55,10 @@ fi
 VERSION_TAG="${1:-$(date +%Y%m%d_%H%M%S)}"
 BUCKET_NAME="${ART_FRAME_S3_BUCKET:-software-releases}"
 PROJECT_DIR="$(pwd)"
-TEMP_DIR="/tmp/art-frame-upload"
-ARCHIVE_NAME="art-frame-${VERSION_TAG}.tar.gz"
+TEMP_DIR="/tmp/flow-frame-upload"
+ARCHIVE_NAME="flow-frame-${VERSION_TAG}.tar.gz"
 
-print_status "Starting art-frame codebase upload to S3"
+print_status "Starting flow-frame codebase upload to S3"
 print_status "Bucket: $BUCKET_NAME"
 print_status "Version: $VERSION_TAG"
 print_status "Project Directory: $PROJECT_DIR"
@@ -93,7 +93,7 @@ cd "$PROJECT_DIR"
 
 # Create exclusion list
 cat > "$TEMP_DIR/exclude.txt" << EOF
-art-frame
+flow-frame
 .git/*
 .DS_Store
 *.log

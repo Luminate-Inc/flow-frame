@@ -36,12 +36,12 @@ fi
 
 echo ""
 echo "=== Binary Dependencies ==="
-if ldd /usr/local/bin/art-frame 2>/dev/null; then
+if ldd /usr/local/bin/flow-frame 2>/dev/null; then
     echo ""
     echo "Checking for missing dependencies..."
-    if ldd /usr/local/bin/art-frame 2>/dev/null | grep -q "not found"; then
+    if ldd /usr/local/bin/flow-frame 2>/dev/null | grep -q "not found"; then
         echo "ERROR: Missing dependencies found:"
-        ldd /usr/local/bin/art-frame 2>/dev/null | grep "not found"
+        ldd /usr/local/bin/flow-frame 2>/dev/null | grep "not found"
         exit 1
     else
         echo "All dependencies resolved successfully"

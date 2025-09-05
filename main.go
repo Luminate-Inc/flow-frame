@@ -12,7 +12,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/veandco/go-sdl2/sdl"
 
-	"art-frame/screens/root"
+	"flow-frame/screens/root"
 )
 
 const (
@@ -239,7 +239,7 @@ func trySDLInitialization(driver string) error {
 	case "wayland":
 		sdl.SetHint(sdl.HINT_VIDEODRIVER, "wayland")
 		// Set basic Wayland-specific hints
-		sdl.SetHint("SDL_VIDEO_WAYLAND_WMCLASS", "art-frame")
+		sdl.SetHint("SDL_VIDEO_WAYLAND_WMCLASS", "flow-frame")
 	case "x11":
 		sdl.SetHint(sdl.HINT_VIDEODRIVER, "x11")
 		sdl.SetHint("SDL_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR", "0")

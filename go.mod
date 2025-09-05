@@ -1,4 +1,4 @@
-module art-frame
+module flow-frame
 
 go 1.23.1
 

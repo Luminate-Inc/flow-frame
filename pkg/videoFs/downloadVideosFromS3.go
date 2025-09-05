@@ -1,7 +1,7 @@
 package videoFs
 
 import (
-	"art-frame/pkg/sharedTypes"
+	"flow-frame/pkg/sharedTypes"
 	"io"
 	"log"
 	"os"

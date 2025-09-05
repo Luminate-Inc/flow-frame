@@ -16,7 +16,7 @@ echo "FFmpeg version:"
 ffmpeg -version | head -1
 echo ""
 
-echo "=== Testing Decoders Used in Art-Frame Priority System ==="
+echo "=== Testing Decoders Used in flow-frame Priority System ==="
 echo ""
 
 # Function to test a decoder
@@ -151,7 +151,7 @@ if ffmpeg -decoders 2>/dev/null | grep -q " mpeg2video "; then
     working_mpeg2="mpeg2video (software)"
 fi
 
-echo "✅ Recommended decoders for art-frame:"
+echo "✅ Recommended decoders for flow-frame:"
 echo "  H.264:     ${working_h264:-❌ None available}"
 echo "  HEVC:      ${working_hevc:-❌ None available}"  
 echo "  MPEG-2:    ${working_mpeg2:-❌ None available}"

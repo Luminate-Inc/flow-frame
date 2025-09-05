@@ -9,7 +9,7 @@ cd "$SCRIPT_DIR"
 
 # Log function
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | logger -t art-frame
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | logger -t flow-frame
 }
 
 log "Art Frame service wrapper (ExecStartPre) - setting up environment"
@@ -117,13 +117,13 @@ apply_pending_update() {
 }
 
 # Verify the main executable exists
-if [ ! -f "$SCRIPT_DIR/art-frame" ]; then
-    log "ERROR: Main executable not found: $SCRIPT_DIR/art-frame"
+if [ ! -f "$SCRIPT_DIR/flow-frame" ]; then
+    log "ERROR: Main executable not found: $SCRIPT_DIR/flow-frame"
     exit 1
 fi
 
-if [ ! -x "$SCRIPT_DIR/art-frame" ]; then
-    log "ERROR: Main executable not executable: $SCRIPT_DIR/art-frame"
+if [ ! -x "$SCRIPT_DIR/flow-frame" ]; then
+    log "ERROR: Main executable not executable: $SCRIPT_DIR/flow-frame"
     exit 1
 fi
 

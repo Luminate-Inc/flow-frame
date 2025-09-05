@@ -43,8 +43,8 @@ case $choice in
         ;;
     4)
         echo "Running Check Decoders (inside container)..."
-        if docker-compose ps art-frame | grep -q "Up"; then
-            docker-compose exec art-frame tests/check-decoders.sh
+        if docker-compose ps flow-frame | grep -q "Up"; then
+            docker-compose exec flow-frame tests/check-decoders.sh
         else
             echo "❌ Container not running. Start with: docker-compose up -d"
         fi
@@ -59,8 +59,8 @@ case $choice in
         ./tests/test-display.sh
         echo ""
         echo "3/3: Decoder Test (inside container)"
-        if docker-compose ps art-frame | grep -q "Up"; then
-            docker-compose exec art-frame tests/check-decoders.sh
+        if docker-compose ps flow-frame | grep -q "Up"; then
+            docker-compose exec flow-frame tests/check-decoders.sh
         else
             echo "❌ Container not running - skipping decoder check"
         fi

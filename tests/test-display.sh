@@ -29,14 +29,14 @@ timeout 30 docker-compose logs -f || true
 echo ""
 echo "=== Quick Status Check ==="
 echo "Container status:"
-docker-compose ps art-frame
+docker-compose ps flow-frame
 
 echo ""
 echo "=== Decoder Availability Test ==="
 echo "Checking which decoders are available in the container..."
-if docker-compose ps art-frame | grep -q "Up"; then
+if docker-compose ps flow-frame | grep -q "Up"; then
     echo "Running decoder check inside container..."
-    docker-compose exec art-frame tests/check-decoders.sh 2>/dev/null | head -20 || echo "Could not run decoder check"
+    docker-compose exec flow-frame tests/check-decoders.sh 2>/dev/null | head -20 || echo "Could not run decoder check"
 else
     echo "Container not running - cannot check decoders"
 fi
@@ -48,7 +48,7 @@ echo "  docker-compose logs -f"
 
 echo ""
 echo "To check decoder availability, run:"
-echo "  docker-compose exec art-frame tests/check-decoders.sh"
+echo "  docker-compose exec flow-frame tests/check-decoders.sh"
 
 echo ""
 echo "To test different decoders, run:"
