@@ -138,13 +138,6 @@ func (rg *RootGame) Draw() error {
 		return err
 	}
 
-	// Draw loading icon if prefetch is pending
-	if rg.video.IsPrefetchPending() {
-		if err := rg.drawLoadingIcon(rg.renderer, w, h); err != nil {
-			return err
-		}
-	}
-
 	// Draw UI overlay if visible
 	if rg.ui != nil && rg.popupVisible {
 		if err := rg.ui.Draw(rg.renderer, w, h); err != nil {
