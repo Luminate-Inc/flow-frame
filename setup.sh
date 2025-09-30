@@ -29,6 +29,32 @@ SERVICE_USER="${SERVICE_USER:-flowframe}"
 GO_VERSION="1.23.1"
 INSTALL_DIR="/opt/flow-frame"
 
+# Detect basic platform details
+OS_ID="$(. /etc/os-release 2>/dev/null && echo "$ID" || echo "unknown")"
+OS_VERSION_ID="$(. /etc/os-release 2>/dev/null && echo "$VERSION_ID" || echo "")"
+MACHINE_ARCH="$(uname -m)"
+
+is_debian_like() {
+    case "$OS_ID" in
+        debian|raspbian|ubuntu) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+is_radxa_zero() {
+    # Heuristics based on device tree compatible or model strings
+    if [ -r /proc/device-tree/compatible ] && grep -aiq "radxa,zero" /proc/device-tree/compatible 2>/dev/null; then
+        return 0
+    fi
+    if [ -r /proc/device-tree/model ] && grep -aiq "Radxa Zero" /proc/device-tree/model 2>/dev/null; then
+        return 0
+    fi
+    if [ -r /sys/firmware/devicetree/base/compatible ] && grep -aiq "radxa,zero" /sys/firmware/devicetree/base/compatible 2>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
 detect_pm() {
     if command -v apt-get >/dev/null 2>&1; then echo apt; return; fi
     if command -v dnf >/dev/null 2>&1; then echo dnf; return; fi
@@ -66,6 +92,77 @@ install_packages() {
             ;;
     esac
     ok "Packages installed"
+}
+
+ensure_debian_nonfree_firmware() {
+    # Ensure non-free-firmware enabled on Debian 12+ for wifi/BT blobs
+    if ! is_debian_like; then return; fi
+    if [ ! -r /etc/apt/sources.list ]; then return; fi
+    if grep -Eq "^deb .* (bookworm|trixie|sid) main" /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; then
+        if ! grep -Eq "non-free-firmware" /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; then
+            info "Enabling non-free-firmware component"
+            sudo sed -i -E 's/^(deb .* (bookworm|trixie|sid) .* main.*)$/\1 non-free-firmware/' /etc/apt/sources.list || true
+            sudo sed -i -E 's/^(deb-src .* (bookworm|trixie|sid) .* main.*)$/\1 non-free-firmware/' /etc/apt/sources.list || true
+            sudo apt-get update -y || true
+        fi
+    else
+        # For older Debian, ensure non-free is present
+        if ! grep -Eq " non-free" /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; then
+            info "Enabling contrib non-free components"
+            sudo sed -i -E 's/^(deb .* main)$/\1 contrib non-free/' /etc/apt/sources.list || true
+            sudo sed -i -E 's/^(deb-src .* main)$/\1 contrib non-free/' /etc/apt/sources.list || true
+            sudo apt-get update -y || true
+        fi
+    fi
+}
+
+install_radxa_zero_wifi_bt() {
+    if ! is_debian_like; then return; fi
+    if ! is_radxa_zero; then return; fi
+    info "Installing Radxa Zero Wi-Fi/Bluetooth firmware and tools"
+    export DEBIAN_FRONTEND=noninteractive
+    # Broadcom/CYW43455/43430 commonly used on Zero variants
+    sudo apt-get install -y firmware-brcm80211 bluez rfkill crda iw wpasupplicant || true
+    # Ensure BT service enabled
+    sudo systemctl enable bluetooth 2>/dev/null || true
+    sudo systemctl restart bluetooth 2>/dev/null || true
+    # Unblock radios
+    rfkill unblock all 2>/dev/null || true
+    ok "Wi-Fi/Bluetooth components installed"
+}
+
+install_radxa_zero_gpu_video() {
+    if ! is_debian_like; then return; fi
+    if ! is_radxa_zero; then return; fi
+    info "Installing GPU (Mesa/Panfrost) and video acceleration tools"
+    export DEBIAN_FRONTEND=noninteractive
+    # Panfrost for Mali-G31, GBM/KMS, Vulkan userspace
+    sudo apt-get install -y \
+        mesa-vulkan-drivers mesa-vulkan-drivers:arm64 2>/dev/null || true
+    sudo apt-get install -y \
+        mesa-utils mesa-utils-extra libgl1-mesa-dri libgles2 \
+        libvulkan1 vulkan-tools || true
+    # V4L2 and ffmpeg hw accel helpers (userspace)
+    sudo apt-get install -y v4l-utils || true
+    # Kernel extra modules (if repository provides) for multimedia
+    if apt-cache show linux-modules-extra-$(uname -r) >/dev/null 2>&1; then
+        sudo apt-get install -y linux-modules-extra-$(uname -r) || true
+    fi
+    ok "GPU/Video components installed"
+}
+
+radxa_zero_diagnostics() {
+    if ! is_radxa_zero; then return; fi
+    info "Radxa Zero diagnostics"
+    if [ -r /proc/device-tree/model ]; then
+        cat /proc/device-tree/model | tr -d '\0' | sed 's/^/  /'
+    fi
+    info "Wi-Fi firmware present?"
+    ls -1 /lib/firmware/brcm/brcmfmac* 2>/dev/null | sed 's/^/  /' || true
+    info "DRM devices:"
+    if [ -d /dev/dri ]; then ls -la /dev/dri | sed 's/^/  /'; fi
+    info "Vulkan ICDs:"
+    ls -la /usr/share/vulkan/icd.d 2>/dev/null | sed 's/^/  /' || true
 }
 
 install_go() {
@@ -209,12 +306,16 @@ minimal_display_check() {
 
 main() {
     info "Starting minimal setup in $PROJECT_DIR"
+    ensure_debian_nonfree_firmware
     install_packages
     install_go
     build_app
     ensure_service_user
+    install_radxa_zero_wifi_bt
+    install_radxa_zero_gpu_video
     configure_gpu_permissions
     minimal_display_check
+    radxa_zero_diagnostics
     deploy_to_install_dir
     create_systemd_service
 
