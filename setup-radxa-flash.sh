@@ -42,15 +42,18 @@ detect_and_delegate_to_lima() {
     local lima_instance="armbian-builder"
 
     # Check if instance exists
-    if limactl list | grep -q "^${lima_instance}"; then
+    if limactl list | tail -n +2 | grep -q "^${lima_instance}[[:space:]]"; then
         info "Using existing Lima VM: ${lima_instance}"
     else
-        info "Creating Lima Ubuntu VM: ${lima_instance}"
-        limactl create --name="${lima_instance}" template://ubuntu-lts
+        info "Creating Lima Debian VM: ${lima_instance}"
+        # IMPORTANT: Use Debian 12 (Bookworm) to match target FFmpeg library versions
+        # Ubuntu 24.04 has FFmpeg 6.x (libavformat60) but Debian Bookworm has FFmpeg 5.1.x (libavformat59)
+        # Create with writable mount for the project directory and 8GB RAM
+        limactl create --name="${lima_instance}" --memory=8 --mount="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd):w" template://debian-12
     fi
 
     # Start the instance if not running
-    local instance_status=$(limactl list | grep "^${lima_instance}" | awk '{print $2}' || echo "")
+    local instance_status=$(limactl list | tail -n +2 | grep "^${lima_instance}[[:space:]]" | awk '{print $2}' || echo "")
     if [[ "$instance_status" != "Running" ]]; then
         info "Starting Lima VM: ${lima_instance}"
         limactl start "${lima_instance}"
@@ -80,7 +83,17 @@ detect_and_delegate_to_lima() {
 detect_and_delegate_to_lima "$@"
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WORK_DIR="$PROJECT_DIR/armbian-work"
+
+# Use writable directory when inside Lima VM
+if [ -f "/.lima-vm" ] || [ -n "${LIMA_INSTANCE:-}" ]; then
+    # Inside Lima VM - use home directory which is writable
+    WORK_DIR="$HOME/armbian-work"
+    info "Running in Lima VM - using writable work directory: $WORK_DIR"
+else
+    # Running natively on Linux - use project directory
+    WORK_DIR="$PROJECT_DIR/armbian-work"
+fi
+
 ARMBIAN_DIR="$WORK_DIR/armbian-build"
 
 # Configuration
@@ -96,7 +109,7 @@ show_usage() {
 Usage: $0 [OPTIONS]
 
 Build Armbian image with Panfrost GPU support for Radxa Zero.
-Designed for macOS - automatically delegates build to Lima Ubuntu VM.
+Designed for macOS - automatically delegates build to Lima Debian VM.
 
 OPTIONS:
     -h, --help          Show this help message
@@ -135,18 +148,20 @@ check_requirements() {
 
     info "Running inside Lima VM"
 
-    # Check for required tools
-    local missing_tools=()
-    for tool in git curl wget go; do
-        if ! command -v "$tool" >/dev/null 2>&1; then
-            missing_tools+=("$tool")
+    # Verify we're on Debian (not Ubuntu) to ensure FFmpeg version compatibility
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        if [[ "$ID" != "debian" ]]; then
+            err "This script requires Debian 12 (Bookworm) for FFmpeg library compatibility"
+            err "Detected OS: $ID $VERSION_ID"
+            err "Ubuntu has FFmpeg 6.x (libavformat60) but Armbian Bookworm needs FFmpeg 5.x (libavformat59)"
+            exit 1
         fi
-    done
-
-    if [ ${#missing_tools[@]} -gt 0 ]; then
-        err "Missing required tools: ${missing_tools[*]}"
-        info "Install with: sudo apt install ${missing_tools[*]}"
-        exit 1
+        if [[ "$VERSION_ID" != "12" ]]; then
+            warn "Expected Debian 12 (Bookworm), detected: Debian $VERSION_ID"
+            warn "FFmpeg library versions may not match target system"
+        fi
+        ok "Running on Debian $VERSION_ID ($VERSION_CODENAME)"
     fi
 
     # Check available disk space (need ~20GB)
@@ -155,10 +170,14 @@ check_requirements() {
 
     if [ "$available_space" -lt "$required_space" ]; then
         warn "Low disk space. Available: $(( available_space / 1024 / 1024 ))GB, Recommended: 20GB+"
-        read -p "Continue anyway? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
+        if [ -t 0 ]; then
+            read -p "Continue anyway? (y/N): " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                exit 1
+            fi
+        else
+            warn "Non-interactive mode - continuing anyway"
         fi
     fi
 
@@ -172,6 +191,10 @@ install_armbian_dependencies() {
         err "This script requires sudo access for installing dependencies"
         exit 1
     fi
+
+    # Add ARM64 architecture support for cross-compilation dependencies
+    info "Adding arm64 architecture support..."
+    sudo dpkg --add-architecture arm64
 
     # Update package lists
     sudo apt-get update
@@ -208,9 +231,66 @@ install_armbian_dependencies() {
         ca-certificates \
         gcc-aarch64-linux-gnu \
         g++-aarch64-linux-gnu \
-        golang-go
+        golang
 
-    ok "Dependencies installed"
+    # Install SDL2 and FFmpeg development libraries for ARM64 cross-compilation
+    info "Installing SDL2 and FFmpeg development libraries for ARM64..."
+
+    # IMPORTANT: FFmpeg versions must match target Debian Bookworm
+    # Ubuntu may have different versions - verify compatibility
+    # Bookworm uses FFmpeg 5.1.x with version 59 series libraries
+    info "Checking FFmpeg library versions for compatibility..."
+
+    sudo apt-get install -y \
+        libsdl2-dev:arm64 \
+        libsdl2-ttf-dev:arm64 \
+        libavcodec-dev:arm64 \
+        libavdevice-dev:arm64 \
+        libavfilter-dev:arm64 \
+        libavformat-dev:arm64 \
+        libavutil-dev:arm64 \
+        libswresample-dev:arm64 \
+        libswscale-dev:arm64 \
+        pkg-config
+
+    # Display installed FFmpeg versions to verify compatibility
+    info "Installed FFmpeg library versions:"
+    dpkg -l | grep -E "libav(format|codec|device|filter|util)|libsw(scale|resample)" | grep arm64 | awk '{print $2, $3}'
+
+    # Verify pkg-config can find the ARM64 libraries
+    if PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig" pkg-config --exists libavformat; then
+        ok "pkg-config successfully found ARM64 FFmpeg libraries"
+        local avformat_version=$(PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig" pkg-config --modversion libavformat)
+        info "libavformat version: $avformat_version"
+
+        # Verify this is version 59.x (FFmpeg 5.x for Debian Bookworm compatibility)
+        if [[ "$avformat_version" =~ ^59\. ]]; then
+            ok "FFmpeg version is compatible with Debian Bookworm (version 59.x)"
+        else
+            err "FFmpeg version mismatch!"
+            err "Expected: 59.x (FFmpeg 5.x for Debian Bookworm)"
+            err "Found: $avformat_version"
+            err "Binary will fail on target system with 'cannot open shared object file' error"
+            exit 1
+        fi
+    else
+        err "pkg-config cannot find ARM64 FFmpeg libraries"
+        exit 1
+    fi
+
+    # Configure Go environment
+    info "Configuring Go environment..."
+    if ! grep -q 'export GOPATH=' ~/.profile 2>/dev/null; then
+        echo 'export GOPATH=$HOME/go' >> ~/.profile
+        echo 'export PATH=$PATH:$GOPATH/bin' >> ~/.profile
+        info "Go environment variables added to ~/.profile"
+    fi
+
+    # Apply to current session
+    export GOPATH=$HOME/go
+    export PATH=$PATH:$GOPATH/bin
+
+    ok "Dependencies installed and Go environment configured"
 }
 
 build_flow_frame_binary() {
@@ -224,8 +304,18 @@ build_flow_frame_binary() {
         exit 1
     fi
 
-    # Cross-compile for ARM64
-    if ! CC=aarch64-linux-gnu-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -o flow-frame; then
+    # Set PKG_CONFIG environment variables for ARM64 cross-compilation
+    export PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig"
+    export PKG_CONFIG_LIBDIR="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig"
+    export PKG_CONFIG_SYSROOT_DIR="/"
+
+    # Cross-compile for ARM64 with SDL2 support
+    if ! CC=aarch64-linux-gnu-gcc \
+         CGO_ENABLED=1 \
+         GOOS=linux \
+         GOARCH=arm64 \
+         PKG_CONFIG_PATH="$PKG_CONFIG_PATH" \
+         go build -o flow-frame; then
         err "Failed to cross-compile flow-frame binary"
         exit 1
     fi
@@ -325,7 +415,8 @@ Main() {
             # Update package lists
             apt-get update
 
-            # Install Mesa + Panfrost drivers
+            # Install Mesa + Panfrost drivers + SDL2 runtime libraries + FFmpeg
+            # Note: ffmpeg package depends on all libav* libraries (version 59 series from FFmpeg 5.1.x)
             apt-get install -y \
                 mesa-utils \
                 mesa-vulkan-drivers \
@@ -335,7 +426,17 @@ Main() {
                 libdrm2 \
                 libwayland-client0 \
                 libwayland-egl1-mesa \
-                weston
+                weston \
+                libsdl2-2.0-0 \
+                libsdl2-ttf-2.0-0 \
+                ffmpeg \
+                libavcodec59 \
+                libavdevice59 \
+                libavfilter8 \
+                libavformat59 \
+                libavutil57 \
+                libswresample4 \
+                libswscale6
 
             echo "✓ Panfrost GPU support installed"
 
@@ -418,6 +519,25 @@ build_armbian_image() {
     info "Image size: $(numfmt --to=iec-i --suffix=B $image_size 2>/dev/null || echo "$image_size bytes")"
 
     BUILT_IMAGE="$built_image"
+
+    # Copy image to project directory if we're in Lima VM
+    if [ -f "/.lima-vm" ] || [ -n "${LIMA_INSTANCE:-}" ]; then
+        local host_output_dir="$PROJECT_DIR/output"
+        info "Copying built image to host-accessible location: $host_output_dir"
+
+        # Try to create output directory (may fail if read-only, that's ok)
+        mkdir -p "$host_output_dir" 2>/dev/null || true
+
+        # If we can write, copy the image
+        if [ -w "$PROJECT_DIR" ] || [ -w "$host_output_dir" ]; then
+            cp "$built_image" "$host_output_dir/" && \
+                info "Image copied to: $host_output_dir/$(basename "$built_image")" || \
+                warn "Could not copy image to project directory (read-only filesystem)"
+        else
+            warn "Project directory is read-only, image remains at: $BUILT_IMAGE"
+            info "To copy manually: limactl copy armbian-builder:$built_image ."
+        fi
+    fi
 
     ok "Armbian image built successfully: $BUILT_IMAGE"
 }

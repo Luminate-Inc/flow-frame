@@ -7,7 +7,10 @@ libgl1-mesa-dri
 libdrm2
 ffmpeg
 libavcodec59
+libavdevice59
+libavfilter8
 libavformat59
 libavutil57
+libswresample4
 libswscale6
 ca-certificates 
