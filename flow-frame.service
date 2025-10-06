@@ -2,6 +2,7 @@
 Description=Flow Frame Digital Display
 Documentation=https://github.com/benreichwein/flow-frame
 Wants=network-online.target
+After=graphical.target
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
@@ -9,7 +10,7 @@ StartLimitBurst=5
 Type=simple
 User=flowframe
 Group=flowframe
-SupplementaryGroups=video render
+SupplementaryGroups=video render input
 
 # ENV
 Environment="GAME_TITLE=FLOW FRAME"
@@ -36,9 +37,13 @@ Environment="SDL_VIDEODRIVER=kmsdrm"
 ExecStart=/usr/local/bin/flow-frame
 WorkingDirectory=/opt/flowframe
 
-# Restart policy - auto-restart on failure with rate limiting
-Restart=on-failure
+# Restart policy - always restart to ensure clean re-run
+Restart=always
 RestartSec=5s
+# Kill entire process group to ensure clean restart
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=10s
 
 # Performance optimization - unrestricted access
 Nice=-20
