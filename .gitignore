@@ -1,5 +1,5 @@
 /.env
 /TODO.txt
-assets/videos/*
+assets/tmp/*
 images/*
 armbian-work/*

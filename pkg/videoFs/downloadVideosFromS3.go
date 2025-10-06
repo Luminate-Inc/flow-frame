@@ -43,7 +43,7 @@ func DownloadVideosFromS3(activeCollection sharedTypes.Collection) ([]string, er
 	s3Client := s3.New(sess)
 
 	// Ensure target directory exists
-	targetDir := filepath.Join("assets", "videos")
+	targetDir := filepath.Join("assets", "tmp")
 	if err := os.MkdirAll(targetDir, os.ModePerm); err != nil {
 		return nil, err
 	}

@@ -48,7 +48,7 @@ func DownloadSegmentFromS3(collection sharedTypes.Collection, startIndex, count 
 	s3Client := s3.New(sess)
 
 	// Ensure target directory exists
-	targetDir := filepath.Join("assets", "videos")
+	targetDir := filepath.Join("assets", "tmp")
 	if err := os.MkdirAll(targetDir, os.ModePerm); err != nil {
 		return nil, false, err
 	}
@@ -126,5 +126,5 @@ func DownloadSegmentFromS3(collection sharedTypes.Collection, startIndex, count 
 	}
 
 	log.Printf("DownloadSegmentFromS3 completed | requested=%d | downloaded=%d | reachedEnd=%t", count, len(paths), reachedEnd)
-	return paths, reachedEnd, nil
+	return paths, reachedEnd, errors.New("test")
 }

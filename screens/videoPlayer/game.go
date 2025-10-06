@@ -15,17 +15,17 @@ import (
 
 const prefetchBuffer = 2 // number of videos to keep pre-downloaded
 
-// clearDownloadedVideos removes all video files from the assets/videos directory
+// clearDownloadedVideos removes all video files from the assets/tmp directory
 func clearDownloadedVideos() {
-	entries, err := os.ReadDir("assets/videos")
+	entries, err := os.ReadDir("assets/tmp")
 	if err != nil {
-		log.Printf("clearDownloadedVideos: failed to read assets/videos: %v", err)
+		log.Printf("clearDownloadedVideos: failed to read assets/tmp: %v", err)
 		return
 	}
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
-			videoPath := "assets/videos/" + entry.Name()
+			videoPath := "assets/tmp/" + entry.Name()
 			if err := os.Remove(videoPath); err != nil {
 				log.Printf("clearDownloadedVideos: failed to remove %s: %v", videoPath, err)
 			}
@@ -60,11 +60,9 @@ func NewVideoPlayerGame() *VideoPlayerGame {
 
 	// Download initial videos from the first collection
 	initialVideos, endOfCollection, err := videoFs.DownloadSegmentFromS3(collections[0], 0, prefetchBuffer)
-	if err != nil {
-		panic(err)
-	}
-	if len(initialVideos) == 0 {
-		panic("no videos downloaded from S3")
+	if err != nil || len(initialVideos) == 0 {
+		// Fall back to checking whats pre existing
+		initialVideos, err = videoFs.AvailableDownloadedVideos()
 	}
 
 	// Open and initialize the first video

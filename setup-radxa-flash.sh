@@ -199,15 +199,22 @@ install_armbian_dependencies() {
     # Update package lists
     sudo apt-get update
 
-    # Install Armbian build dependencies + cross-compilation tools
-    sudo apt-get install -y \
+    # Install packages in groups for better error handling
+    info "Installing core build tools..."
+    if ! sudo apt-get install -y \
         git curl wget \
         build-essential \
         bison flex \
         libssl-dev \
         bc \
         u-boot-tools \
-        python3 python3-pip \
+        python3 python3-pip; then
+        err "Failed to install core build tools"
+        exit 1
+    fi
+
+    info "Installing system utilities..."
+    if ! sudo apt-get install -y \
         qemu-user-static \
         debootstrap \
         rsync \
@@ -217,7 +224,13 @@ install_armbian_dependencies() {
         gpg \
         pigz pixz \
         ccache \
-        distcc \
+        distcc; then
+        err "Failed to install system utilities"
+        exit 1
+    fi
+
+    info "Installing filesystem tools..."
+    if ! sudo apt-get install -y \
         f2fs-tools \
         mtools \
         parted \
@@ -228,10 +241,19 @@ install_armbian_dependencies() {
         fakeroot \
         ntfs-3g \
         apt-cacher-ng \
-        ca-certificates \
+        ca-certificates; then
+        err "Failed to install filesystem tools"
+        exit 1
+    fi
+
+    info "Installing cross-compilation toolchain..."
+    if ! sudo apt-get install -y \
         gcc-aarch64-linux-gnu \
         g++-aarch64-linux-gnu \
-        golang
+        golang; then
+        err "Failed to install cross-compilation toolchain"
+        exit 1
+    fi
 
     # Install SDL2 and FFmpeg development libraries for ARM64 cross-compilation
     info "Installing SDL2 and FFmpeg development libraries for ARM64..."
@@ -385,9 +407,59 @@ EOF
 
     # Copy flow-frame binary to overlay
     info "Copying flow-frame binary to image overlay..."
+    if [ ! -f "$PROJECT_DIR/flow-frame" ]; then
+        err "flow-frame binary not found at: $PROJECT_DIR/flow-frame"
+        err "Run build_flow_frame_binary() first"
+        exit 1
+    fi
+
     mkdir -p userpatches/overlay/usr/local/bin
-    cp "$PROJECT_DIR/flow-frame" userpatches/overlay/usr/local/bin/flow-frame
+    if ! cp "$PROJECT_DIR/flow-frame" userpatches/overlay/usr/local/bin/flow-frame; then
+        err "Failed to copy flow-frame binary to overlay"
+        exit 1
+    fi
     chmod +x userpatches/overlay/usr/local/bin/flow-frame
+    ok "flow-frame binary copied successfully"
+
+    # Copy assets/stock folder to overlay
+    info "Copying assets/stock folder to image overlay..."
+    if [ ! -d "$PROJECT_DIR/assets/stock" ]; then
+        err "assets/stock directory not found at: $PROJECT_DIR/assets/stock"
+        exit 1
+    fi
+
+    mkdir -p userpatches/overlay/opt/flowframe/assets
+    if ! cp -r "$PROJECT_DIR/assets/stock/"* userpatches/overlay/opt/flowframe/assets/; then
+        err "Failed to copy assets/stock to overlay"
+        exit 1
+    fi
+    ok "assets/stock folder copied successfully"
+
+    # Copy systemd service file to overlay
+    info "Copying systemd service file to image overlay..."
+    if [ ! -f "$PROJECT_DIR/flow-frame.service" ]; then
+        err "flow-frame.service not found at: $PROJECT_DIR/flow-frame.service"
+        err "Create the service file before running this script"
+        exit 1
+    fi
+
+    mkdir -p userpatches/overlay/etc/systemd/system
+    if ! cp "$PROJECT_DIR/flow-frame.service" userpatches/overlay/etc/systemd/system/flow-frame.service; then
+        err "Failed to copy flow-frame.service to overlay"
+        exit 1
+    fi
+    chmod 644 userpatches/overlay/etc/systemd/system/flow-frame.service
+
+    # Verify files were copied successfully
+    if [ ! -f "userpatches/overlay/usr/local/bin/flow-frame" ]; then
+        err "Verification failed: flow-frame binary not in overlay"
+        exit 1
+    fi
+    if [ ! -f "userpatches/overlay/etc/systemd/system/flow-frame.service" ]; then
+        err "Verification failed: flow-frame.service not in overlay"
+        exit 1
+    fi
+    ok "systemd service file copied and verified successfully"
 
     # Create minimal customize script that installs Mesa packages
     cat > userpatches/customize-image.sh <<'CUSTOMIZE'
@@ -416,7 +488,7 @@ Main() {
             apt-get update
 
             # Install Mesa + Panfrost drivers + SDL2 runtime libraries + FFmpeg
-            # Note: ffmpeg package depends on all libav* libraries (version 59 series from FFmpeg 5.1.x)
+            # Note: ffmpeg package automatically pulls in all required libav* libraries
             apt-get install -y \
                 mesa-utils \
                 mesa-vulkan-drivers \
@@ -429,14 +501,7 @@ Main() {
                 weston \
                 libsdl2-2.0-0 \
                 libsdl2-ttf-2.0-0 \
-                ffmpeg \
-                libavcodec59 \
-                libavdevice59 \
-                libavfilter8 \
-                libavformat59 \
-                libavutil57 \
-                libswresample4 \
-                libswscale6
+                ffmpeg
 
             echo "✓ Panfrost GPU support installed"
 
@@ -457,6 +522,44 @@ Main() {
                 ls -lh /usr/local/bin/flow-frame
             else
                 echo "⚠ Warning: flow-frame binary not found at /usr/local/bin/flow-frame"
+            fi
+
+            # Verify and set permissions for assets directory
+            if [ -d "/opt/flowframe/assets" ]; then
+                chmod -R 755 /opt/flowframe/assets
+                echo "✓ assets directory installed at /opt/flowframe/assets"
+                ls -lh /opt/flowframe/assets
+            else
+                echo "⚠ Warning: assets directory not found at /opt/flowframe/assets"
+            fi
+
+            # Create flowframe system user and group
+            echo "=== Setting up flow-frame service user ==="
+            if ! id flowframe >/dev/null 2>&1; then
+                useradd -r -s /bin/false -d /opt/flowframe flowframe
+                echo "✓ Created flowframe system user"
+            else
+                echo "ℹ flowframe user already exists"
+            fi
+
+            # Add flowframe user to video and render groups for GPU access
+            usermod -aG video,render flowframe
+            echo "✓ Added flowframe user to video and render groups"
+
+            # Create working directory and set ownership
+            mkdir -p /opt/flowframe
+            chown -R flowframe:flowframe /opt/flowframe
+            echo "✓ Created working directory /opt/flowframe with proper ownership"
+
+            # Enable and start flow-frame service
+            echo "=== Configuring flow-frame systemd service ==="
+            if [ -f "/etc/systemd/system/flow-frame.service" ]; then
+                systemctl daemon-reload
+                systemctl enable flow-frame.service
+                echo "✓ flow-frame service enabled for boot"
+                echo "ℹ Service will start automatically on first boot"
+            else
+                echo "⚠ Warning: flow-frame.service not found"
             fi
             ;;
     esac
@@ -545,8 +648,19 @@ build_armbian_image() {
 cleanup() {
     if [ "$CLEAN_BUILD" = true ]; then
         info "Cleaning build artifacts..."
-        rm -rf "$WORK_DIR" 2>/dev/null || true
-        ok "Build artifacts cleaned"
+
+        # Preserve the Armbian git repository, only clean build outputs
+        if [ -d "$ARMBIAN_DIR" ]; then
+            info "Preserving Armbian repository, cleaning build artifacts only..."
+            rm -rf "$ARMBIAN_DIR/output" 2>/dev/null || true
+            rm -rf "$ARMBIAN_DIR/.tmp" 2>/dev/null || true
+            rm -rf "$ARMBIAN_DIR/cache/sources" 2>/dev/null || true
+            ok "Build artifacts cleaned (repository preserved)"
+        else
+            # If Armbian dir doesn't exist, clean everything
+            rm -rf "$WORK_DIR" 2>/dev/null || true
+            ok "Work directory cleaned"
+        fi
     fi
 }
 

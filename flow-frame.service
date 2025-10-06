@@ -1,0 +1,59 @@
+[Unit]
+Description=Flow Frame Digital Display
+Documentation=https://github.com/benreichwein/flow-frame
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=flowframe
+Group=flowframe
+SupplementaryGroups=video render
+
+# ENV
+Environment="GAME_TITLE=FLOW FRAME"
+Environment="AWS_DEFAULT_REGION=us-east-2"
+Environment="AWS_ACCESS_KEY_ID=AKIATV3TWTVMKTTDPAEK"
+Environment="AWS_SECRET_ACCESS_KEY=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"
+Environment="VIDEO_DECODER=kmsdrm"
+Environment="ART_FRAME_S3_BUCKET=software-releases"
+Environment="FORCE_SOFTWARE_DECODER=0"
+Environment="DEBUG_DECODERS=0"
+Environment="DEBUG_FRAME_UPDATES=0"
+Environment="GODEBUG=madvdontneed=1"
+Environment="GOMAXPROCS=1"
+Environment="GOGC=25"
+Environment="GOMEMLIMIT=256MiB"
+Environment="CGO_ENABLED=1"
+Environment="CGO_CFLAGS=-O1 -g -fPIC"
+Environment="CGO_LDFLAGS=-Wl,--no-as-needed -fPIC"
+
+# SDL2 video driver configuration for Radxa Zero (KMS/DRM)
+Environment="SDL_VIDEODRIVER=kmsdrm"
+
+# Binary execution
+ExecStart=/usr/local/bin/flow-frame
+WorkingDirectory=/opt/flowframe
+
+# Restart policy - auto-restart on failure with rate limiting
+Restart=on-failure
+RestartSec=5s
+
+# Performance optimization - unrestricted access
+Nice=-20
+CPUSchedulingPolicy=fifo
+CPUSchedulingPriority=99
+IOSchedulingClass=realtime
+IOSchedulingPriority=0
+
+# Resource limits - unlimited
+LimitNOFILE=infinity
+LimitMEMLOCK=infinity
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical.target
