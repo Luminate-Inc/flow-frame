@@ -33,8 +33,8 @@ func clearDownloadedVideos() {
 	}
 }
 
-// NewVideoPlayerGame creates and initializes a new video player game
-func NewVideoPlayerGame() *VideoPlayerGame {
+// NewVideoPlayerScreen creates and initializes a new video player screen
+func NewVideoPlayerScreen() *VideoPlayerScreen {
 	// Clean up any existing downloaded videos
 	clearDownloadedVideos()
 
@@ -87,8 +87,8 @@ func NewVideoPlayerGame() *VideoPlayerGame {
 		nextS3Index = len(initialVideos)
 	}
 
-	// Create the game instance
-	g := &VideoPlayerGame{
+	// Create the screen instance
+	g := &VideoPlayerScreen{
 		player:              player,
 		downloadedVideos:    initialVideos,
 		playbackSpeed:       1.0,          // normal speed
@@ -110,7 +110,7 @@ func NewVideoPlayerGame() *VideoPlayerGame {
 }
 
 // SetRenderer configures the SDL2 renderer for video rendering
-func (g *VideoPlayerGame) SetRenderer(renderer *sdl.Renderer) error {
+func (g *VideoPlayerScreen) SetRenderer(renderer *sdl.Renderer) error {
 	g.renderer = renderer
 	if g.player != nil {
 		return g.player.SetRenderer(renderer)
@@ -119,7 +119,7 @@ func (g *VideoPlayerGame) SetRenderer(renderer *sdl.Renderer) error {
 }
 
 // Update processes input and updates video playback state
-func (g *VideoPlayerGame) Update(keyState []uint8) error {
+func (g *VideoPlayerScreen) Update(keyState []uint8) error {
 	// Update video decoding
 	if err := g.player.Update(); err != nil {
 		g.err = err
@@ -147,7 +147,7 @@ func (g *VideoPlayerGame) Update(keyState []uint8) error {
 }
 
 // handleInput processes SDL2 keyboard input
-func (g *VideoPlayerGame) handleInput(keyState []uint8) {
+func (g *VideoPlayerScreen) handleInput(keyState []uint8) {
 	// Skip input handling if keyState is nil (when UI popup is active)
 	if keyState == nil {
 		g.rightKeyPressed = false
@@ -166,7 +166,7 @@ func (g *VideoPlayerGame) handleInput(keyState []uint8) {
 }
 
 // handleIntervalSwitching checks if it's time to switch videos based on the interval setting
-func (g *VideoPlayerGame) handleIntervalSwitching() {
+func (g *VideoPlayerScreen) handleIntervalSwitching() {
 	dur := intervalToDuration(g.playbackInterval)
 	if dur > 0 && time.Since(g.playStartTime) >= dur {
 		log.Printf("Update: switching to next video due to interval")
@@ -175,7 +175,7 @@ func (g *VideoPlayerGame) handleIntervalSwitching() {
 }
 
 // handlePrefetchResults processes completed background prefetch operations
-func (g *VideoPlayerGame) handlePrefetchResults() {
+func (g *VideoPlayerScreen) handlePrefetchResults() {
 	select {
 	case res := <-g.prefetchResultCh:
 		if res.err != nil {
@@ -206,7 +206,7 @@ func (g *VideoPlayerGame) handlePrefetchResults() {
 }
 
 // handleCollectionSwitching manages background collection downloads and switches
-func (g *VideoPlayerGame) handleCollectionSwitching() {
+func (g *VideoPlayerScreen) handleCollectionSwitching() {
 	// Start collection switch if requested
 	if g.requestedCollection != g.activeCollection && !g.switchPending {
 		g.switchPending = true
@@ -245,7 +245,7 @@ func (g *VideoPlayerGame) handleCollectionSwitching() {
 }
 
 // Draw renders the current video frame using SDL2
-func (g *VideoPlayerGame) Draw(renderer *sdl.Renderer, screenWidth, screenHeight int32) error {
+func (g *VideoPlayerScreen) Draw(renderer *sdl.Renderer, screenWidth, screenHeight int32) error {
 	if g.err != nil {
 		return g.err
 	}
@@ -274,7 +274,7 @@ func intervalToDuration(label string) time.Duration {
 }
 
 // nextVideo advances to the next video in the queue
-func (g *VideoPlayerGame) nextVideo() {
+func (g *VideoPlayerScreen) nextVideo() {
 	// Queue request if prefetch is in progress
 	if g.prefetchPending {
 		g.queuedNextCalls = 1
@@ -310,7 +310,7 @@ func (g *VideoPlayerGame) nextVideo() {
 }
 
 // cleanupCurrentVideo removes the currently playing video from disk and buffer
-func (g *VideoPlayerGame) cleanupCurrentVideo() {
+func (g *VideoPlayerScreen) cleanupCurrentVideo() {
 	playedPath := g.downloadedVideos[g.currentVideo]
 
 	// Close the current player
@@ -327,7 +327,7 @@ func (g *VideoPlayerGame) cleanupCurrentVideo() {
 }
 
 // startNextVideo initializes playback of the next video in the buffer
-func (g *VideoPlayerGame) startNextVideo() error {
+func (g *VideoPlayerScreen) startNextVideo() error {
 	nextPath := g.downloadedVideos[g.currentVideo]
 	log.Printf("nextVideo: playing %s", nextPath)
 
@@ -360,7 +360,7 @@ func (g *VideoPlayerGame) startNextVideo() error {
 }
 
 // startPrefetch begins background download of the next video
-func (g *VideoPlayerGame) startPrefetch() {
+func (g *VideoPlayerScreen) startPrefetch() {
 	missing := prefetchBuffer - len(g.downloadedVideos)
 	if missing <= 0 || g.prefetchPending {
 		return
@@ -384,7 +384,7 @@ func (g *VideoPlayerGame) startPrefetch() {
 }
 
 // SetPlaybackSpeed updates the video playback speed
-func (g *VideoPlayerGame) SetPlaybackSpeed(speed float64) {
+func (g *VideoPlayerScreen) SetPlaybackSpeed(speed float64) {
 	if speed <= 0 {
 		return
 	}
@@ -393,13 +393,13 @@ func (g *VideoPlayerGame) SetPlaybackSpeed(speed float64) {
 }
 
 // SetPlaybackInterval updates the automatic video switching interval
-func (g *VideoPlayerGame) SetPlaybackInterval(label string) {
+func (g *VideoPlayerScreen) SetPlaybackInterval(label string) {
 	log.Printf("SetPlaybackInterval: set to '%s'", label)
 	g.playbackInterval = label
 }
 
 // SetRequestedCollection requests a switch to a different video collection
-func (g *VideoPlayerGame) SetRequestedCollection(idx int) {
+func (g *VideoPlayerScreen) SetRequestedCollection(idx int) {
 	if idx < 0 || idx >= len(g.collections) {
 		log.Printf("SetRequestedCollection: invalid index %d", idx)
 		return
@@ -409,12 +409,12 @@ func (g *VideoPlayerGame) SetRequestedCollection(idx int) {
 }
 
 // Collections returns the list of available video collections
-func (g *VideoPlayerGame) Collections() []sharedTypes.Collection {
+func (g *VideoPlayerScreen) Collections() []sharedTypes.Collection {
 	return g.collections
 }
 
 // applyNewCollection switches to a new collection that was downloaded in the background
-func (g *VideoPlayerGame) applyNewCollection(idx int, vids []string, endOfCollection bool) error {
+func (g *VideoPlayerScreen) applyNewCollection(idx int, vids []string, endOfCollection bool) error {
 	log.Printf("applyNewCollection: switching to %s", g.collections[idx].Title)
 
 	// Stop current playback
@@ -468,16 +468,16 @@ func (g *VideoPlayerGame) applyNewCollection(idx int, vids []string, endOfCollec
 }
 
 // PlaybackSpeed returns the current playback speed multiplier
-func (g *VideoPlayerGame) PlaybackSpeed() float64 {
+func (g *VideoPlayerScreen) PlaybackSpeed() float64 {
 	return g.playbackSpeed
 }
 
 // PlaybackInterval returns the current interval setting
-func (g *VideoPlayerGame) PlaybackInterval() string {
+func (g *VideoPlayerScreen) PlaybackInterval() string {
 	return g.playbackInterval
 }
 
 // IsPrefetchPending returns whether a prefetch operation is currently in progress
-func (g *VideoPlayerGame) IsPrefetchPending() bool {
+func (g *VideoPlayerScreen) IsPrefetchPending() bool {
 	return g.prefetchPending
 }

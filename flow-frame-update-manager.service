@@ -1,0 +1,29 @@
+[Unit]
+Description=Flow Frame Update Manager
+Documentation=https://github.com/benreichwein/flow-frame
+# Ensure network is available before checking for updates
+Wants=network-online.target
+After=network-online.target
+# Run before the main flow-frame service
+Before=flow-frame.service
+
+[Service]
+Type=oneshot
+# Load shared environment file (APP_VERSION is defined here)
+EnvironmentFile=/opt/flowframe/.env
+# Execute the update checker script
+ExecStart=/usr/local/bin/flow-frame-updater.sh
+# Timeout for the update check (5 minutes should be plenty)
+TimeoutStartSec=300
+# Don't restart on failure - just log and continue
+RemainAfterExit=no
+# Run with elevated privileges to write to /usr/local/bin/
+User=root
+Group=root
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+# Start this service at boot
+WantedBy=multi-user.target

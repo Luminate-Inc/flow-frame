@@ -73,12 +73,12 @@ func main() {
 	}
 	defer renderer.Destroy()
 
-	// Create and initialize the game
-	game := root.NewRootGame(window, renderer)
-	defer game.Close()
+	// Create and initialize the screen
+	screen := root.NewRootScreen(window, renderer)
+	defer screen.Close()
 
 	// Run the main game loop
-	runGameLoop(game)
+	runGameLoop(screen)
 
 	log.Println("Art Frame shutting down...")
 }
@@ -437,7 +437,7 @@ func createRenderer(window *sdl.Window) (*sdl.Renderer, error) {
 }
 
 // runGameLoop executes the main SDL2 game loop
-func runGameLoop(game *root.RootGame) {
+func runGameLoop(game *root.RootScreen) {
 	running := true
 	frameTime := time.Second / targetFPS
 	lastTime := time.Now()

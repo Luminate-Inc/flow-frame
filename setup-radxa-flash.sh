@@ -551,6 +551,15 @@ Main() {
             chown -R flowframe:flowframe /opt/flowframe
             echo "✓ Created working directory /opt/flowframe with proper ownership"
 
+            # Create shared environment file with APP_VERSION
+            echo "=== Creating shared environment file ==="
+            cat > /opt/flowframe/.env <<'ENVFILE'
+APP_VERSION=1
+ENVFILE
+            chown flowframe:flowframe /opt/flowframe/.env
+            chmod 644 /opt/flowframe/.env
+            echo "✓ Created /opt/flowframe/.env with APP_VERSION=1"
+
             # Enable and start flow-frame service
             echo "=== Configuring flow-frame systemd service ==="
             if [ -f "/etc/systemd/system/flow-frame.service" ]; then

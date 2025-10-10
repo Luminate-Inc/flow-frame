@@ -5,14 +5,6 @@ import (
 	"os"
 )
 
-// Settings represents user-tunable configuration that should persist across
-// application restarts. Add additional fields here as new settings are
-// introduced.
-type Settings struct {
-	PlaybackSpeed    float64 `json:"playbackSpeed"`
-	PlaybackInterval string  `json:"playbackInterval"`
-}
-
 var defaultSettings = Settings{
 	PlaybackSpeed:    1.0,
 	PlaybackInterval: "Every hour",

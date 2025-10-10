@@ -2,7 +2,7 @@
 Description=Flow Frame Digital Display
 Documentation=https://github.com/benreichwein/flow-frame
 Wants=network-online.target
-After=graphical.target
+After=graphical.target flow-frame-update-manager.service
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
@@ -12,7 +12,9 @@ User=flowframe
 Group=flowframe
 SupplementaryGroups=video render input
 
-# ENV
+# ENV - Load shared environment file first
+EnvironmentFile=/opt/flowframe/.env
+
 Environment="GAME_TITLE=FLOW FRAME"
 Environment="AWS_DEFAULT_REGION=us-east-2"
 Environment="AWS_ACCESS_KEY_ID=AKIATV3TWTVMKTTDPAEK"

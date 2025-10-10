@@ -9,7 +9,7 @@ import (
 	"github.com/veandco/go-sdl2/sdl"
 )
 
-type VideoPlayerGame struct {
+type VideoPlayerScreen struct {
 	player *mpeg.Player
 	err    error
 
