@@ -487,7 +487,7 @@ Main() {
             # Update package lists
             apt-get update
 
-            # Install Mesa + Panfrost drivers + SDL2 runtime libraries + FFmpeg
+            # Install Mesa + Panfrost drivers + SDL2 runtime libraries + FFmpeg + NetworkManager
             # Note: ffmpeg package automatically pulls in all required libav* libraries
             apt-get install -y \
                 mesa-utils \
@@ -501,7 +501,8 @@ Main() {
                 weston \
                 libsdl2-2.0-0 \
                 libsdl2-ttf-2.0-0 \
-                ffmpeg
+                ffmpeg \
+                network-manager
 
             echo "✓ Panfrost GPU support installed"
 
@@ -550,6 +551,23 @@ Main() {
             mkdir -p /opt/flowframe
             chown -R flowframe:flowframe /opt/flowframe
             echo "✓ Created working directory /opt/flowframe with proper ownership"
+
+            # Configure sudo permissions for flowframe user to manage WiFi and restart service
+            echo "=== Configuring sudo permissions for flowframe user ==="
+            cat > /etc/sudoers.d/flowframe <<'SUDOERS'
+# Allow flowframe user to run nmcli for WiFi management without password
+flowframe ALL=(ALL) NOPASSWD: /usr/bin/nmcli
+# Allow flowframe user to restart its own service for updates
+flowframe ALL=(ALL) NOPASSWD: /bin/systemctl restart flow-frame
+SUDOERS
+            chmod 440 /etc/sudoers.d/flowframe
+            echo "✓ Configured sudo permissions for flowframe user"
+
+            # Enable and start NetworkManager
+            echo "=== Configuring NetworkManager ==="
+            systemctl enable NetworkManager
+            systemctl start NetworkManager || echo "ℹ NetworkManager will start on first boot"
+            echo "✓ NetworkManager enabled and configured"
 
             # Create shared environment file with APP_VERSION
             echo "=== Creating shared environment file ==="

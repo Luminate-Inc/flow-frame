@@ -78,6 +78,7 @@ func BuildIntervalMenuItems(currentInterval string) []Item {
 // BuildSystemMenuItems creates the system settings menu items
 func BuildSystemMenuItems() []Item {
 	return []Item{
+		{Title: "WiFi Networks", Value: "Connect to a WiFi network"},
 		{Title: "Restart and check for updates", Value: "Restart the flow-frame service"},
 		{Title: "Back", Value: ""},
 	}
@@ -96,4 +97,26 @@ func ParseSpeedFromLabel(label string) (float64, error) {
 // CleanIntervalLabel removes the checkmark from an interval label
 func CleanIntervalLabel(label string) string {
 	return strings.TrimPrefix(label, "✓ ")
+}
+
+// BuildWiFiMenuItems creates the WiFi networks menu items
+func BuildWiFiMenuItems() []Item {
+	networks, err := ScanWiFiNetworks()
+	if err != nil {
+		return []Item{
+			{Title: "Error scanning networks", Value: err.Error()},
+			{Title: "Back", Value: ""},
+		}
+	}
+
+	if len(networks) == 0 {
+		return []Item{
+			{Title: "No networks found", Value: ""},
+			{Title: "Back", Value: ""},
+		}
+	}
+
+	// Add back option to the networks list
+	networks = append(networks, Item{Title: "Back", Value: ""})
+	return networks
 }

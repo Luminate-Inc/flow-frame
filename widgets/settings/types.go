@@ -18,8 +18,10 @@ type Item struct {
 type MenuType string
 
 const (
-	MainMenu     MenuType = "main"
-	SpeedMenu    MenuType = "speed"
-	IntervalMenu MenuType = "interval"
-	SystemMenu   MenuType = "system"
+	MainMenu         MenuType = "main"
+	SpeedMenu        MenuType = "speed"
+	IntervalMenu     MenuType = "interval"
+	SystemMenu       MenuType = "system"
+	WiFiMenu         MenuType = "wifi"
+	WiFiPasswordMenu MenuType = "wifi_password"
 )

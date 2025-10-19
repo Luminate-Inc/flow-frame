@@ -75,6 +75,41 @@ func (rg *RootScreen) Update() error {
 
 // handleUIInput processes input when UI is visible
 func (rg *RootScreen) handleUIInput() {
+	// Special handling for password input menu
+	if rg.tabsWidget.ActiveTab() == tabs.SettingsTab && rg.settingsWidget.CurrentMenu() == settings.WiFiPasswordMenu {
+		// Up/Down navigation for row selection
+		if rg.keyTracker.IsPressed(rg.keyState, sdl.SCANCODE_DOWN) {
+			rg.settingsWidget.MoveGridRow(1)
+		}
+		if rg.keyTracker.IsPressed(rg.keyState, sdl.SCANCODE_UP) {
+			rg.settingsWidget.MoveGridRow(-1)
+		}
+
+		// Left/Right navigation for column selection
+		if rg.keyTracker.IsPressed(rg.keyState, sdl.SCANCODE_LEFT) {
+			rg.settingsWidget.MoveGridCol(-1)
+		}
+		if rg.keyTracker.IsPressed(rg.keyState, sdl.SCANCODE_RIGHT) {
+			rg.settingsWidget.MoveGridCol(1)
+		}
+
+		// Activation to select character or action
+		if rg.keyTracker.IsPressed(rg.keyState, sdl.SCANCODE_RETURN) ||
+			rg.keyTracker.IsPressed(rg.keyState, sdl.SCANCODE_SPACE) ||
+			rg.mouseTracker.IsPressed(rg.mouseButtons, sdl.ButtonRMask()) ||
+			rg.mouseTracker.IsPressed(rg.mouseButtons, sdl.ButtonLMask()) {
+			rg.activateSelection()
+		}
+
+		// ESC to cancel password input
+		if rg.keyTracker.IsPressed(rg.keyState, sdl.SCANCODE_ESCAPE) {
+			items := settings.BuildWiFiMenuItems()
+			rg.settingsWidget.SetItems(items)
+			rg.settingsWidget.SetCurrentMenu(settings.WiFiMenu)
+		}
+		return
+	}
+
 	// Up/Down arrow navigation - navigate items within current tab
 	if rg.keyTracker.IsPressed(rg.keyState, sdl.SCANCODE_DOWN) {
 		switch rg.tabsWidget.ActiveTab() {
@@ -187,8 +222,15 @@ func (rg *RootScreen) drawUI(screenWidth, screenHeight int32) error {
 			return err
 		}
 	case tabs.SettingsTab:
-		if err := rg.settingsWidget.Draw(rg.renderer, uiX, contentY, uiWidth, contentHeight, rg.fonts.Large, rg.fonts.Medium, rg.fonts.Small); err != nil {
-			return err
+		// Check if we're in password input mode
+		if rg.settingsWidget.CurrentMenu() == settings.WiFiPasswordMenu {
+			if err := rg.settingsWidget.DrawPasswordInput(rg.renderer, uiX, contentY, uiWidth, contentHeight, rg.fonts.Large, rg.fonts.Medium, rg.fonts.Small); err != nil {
+				return err
+			}
+		} else {
+			if err := rg.settingsWidget.Draw(rg.renderer, uiX, contentY, uiWidth, contentHeight, rg.fonts.Large, rg.fonts.Medium, rg.fonts.Small); err != nil {
+				return err
+			}
 		}
 	case tabs.CloseTab:
 		if err := settings.DrawCloseTab(rg.renderer, uiX, contentY, uiWidth, contentHeight, rg.fonts.Medium); err != nil {
@@ -300,6 +342,10 @@ func (rg *RootScreen) handleSettingsSelection() {
 		rg.handleIntervalMenuSelection(selectedItem.Title)
 	case settings.SystemMenu:
 		rg.handleSystemMenuSelection(selectedItem.Title)
+	case settings.WiFiMenu:
+		rg.handleWiFiMenuSelection(selectedItem.Title)
+	case settings.WiFiPasswordMenu:
+		rg.handlePasswordInput()
 	}
 }
 
@@ -324,7 +370,10 @@ func (rg *RootScreen) handleMainMenuSelection(index int) {
 // handleSpeedMenuSelection handles speed menu selections
 func (rg *RootScreen) handleSpeedMenuSelection(label string) {
 	if label == "Back" {
-		rg.showUI()
+		// Return to settings main menu
+		items := settings.BuildMainMenuItems(rg.video.PlaybackSpeed(), rg.video.PlaybackInterval())
+		rg.settingsWidget.SetItems(items)
+		rg.settingsWidget.SetCurrentMenu(settings.MainMenu)
 		return
 	}
 
@@ -333,16 +382,24 @@ func (rg *RootScreen) handleSpeedMenuSelection(label string) {
 		rg.settings.PlaybackSpeed = speed
 		if err := settings.Save(rg.settings); err != nil {
 			log.Printf("Warning: Failed to save playback speed setting: %v", err)
+			rg.settingsWidget.SetStatusMessage("Error: Failed to save setting")
+		} else {
+			rg.settingsWidget.SetStatusMessage("✓ Playback speed updated")
 		}
-	}
 
-	rg.showUI()
+		// Refresh the menu to show updated checkmark
+		items := settings.BuildSpeedMenuItems(rg.video.PlaybackSpeed())
+		rg.settingsWidget.SetItems(items)
+	}
 }
 
 // handleIntervalMenuSelection handles interval menu selections
 func (rg *RootScreen) handleIntervalMenuSelection(label string) {
 	if label == "Back" {
-		rg.showUI()
+		// Return to settings main menu
+		items := settings.BuildMainMenuItems(rg.video.PlaybackSpeed(), rg.video.PlaybackInterval())
+		rg.settingsWidget.SetItems(items)
+		rg.settingsWidget.SetCurrentMenu(settings.MainMenu)
 		return
 	}
 
@@ -351,20 +408,124 @@ func (rg *RootScreen) handleIntervalMenuSelection(label string) {
 	rg.settings.PlaybackInterval = cleanLabel
 	if err := settings.Save(rg.settings); err != nil {
 		log.Printf("Warning: Failed to save playback interval setting: %v", err)
+		rg.settingsWidget.SetStatusMessage("Error: Failed to save setting")
+	} else {
+		rg.settingsWidget.SetStatusMessage("✓ Playback interval updated")
 	}
 
-	rg.showUI()
+	// Refresh the menu to show updated checkmark
+	items := settings.BuildIntervalMenuItems(rg.video.PlaybackInterval())
+	rg.settingsWidget.SetItems(items)
 }
 
 // handleSystemMenuSelection handles system menu selections
 func (rg *RootScreen) handleSystemMenuSelection(label string) {
 	if label == "Back" {
-		rg.showUI()
+		// Return to settings main menu
+		items := settings.BuildMainMenuItems(rg.video.PlaybackSpeed(), rg.video.PlaybackInterval())
+		rg.settingsWidget.SetItems(items)
+		rg.settingsWidget.SetCurrentMenu(settings.MainMenu)
+		return
+	}
+
+	if label == "WiFi Networks" {
+		items := settings.BuildWiFiMenuItems()
+		rg.settingsWidget.SetItems(items)
+		rg.settingsWidget.SetCurrentMenu(settings.WiFiMenu)
 		return
 	}
 
 	if label == "Restart and check for updates" {
 		rg.restartSystem()
+	}
+}
+
+// handleWiFiMenuSelection handles WiFi menu selections
+func (rg *RootScreen) handleWiFiMenuSelection(label string) {
+	if label == "Back" {
+		// Return to system menu
+		items := settings.BuildSystemMenuItems()
+		rg.settingsWidget.SetItems(items)
+		rg.settingsWidget.SetCurrentMenu(settings.SystemMenu)
+		return
+	}
+
+	// Skip error and "no networks" messages
+	if label == "Error scanning networks" || label == "No networks found" {
+		return
+	}
+
+	if label != "" {
+		log.Printf("Attempting to connect to WiFi network: %s", label)
+
+		// Check if it's an open network
+		isOpen := false
+		if len(label) > 7 && label[len(label)-7:] == " (Open)" {
+			isOpen = true
+		}
+
+		if !isOpen {
+			// Show password input UI for secured networks
+			log.Printf("Network '%s' is secured. Showing password input.", label)
+			rg.settingsWidget.StartPasswordInput(label)
+			rg.settingsWidget.SetCurrentMenu(settings.WiFiPasswordMenu)
+			return
+		}
+
+		// Connect to open network
+		go func() {
+			if err := settings.ConnectToWiFi(label, ""); err != nil {
+				log.Printf("Failed to connect to WiFi: %v", err)
+			} else {
+				log.Printf("Successfully connected to WiFi network: %s", label)
+			}
+		}()
+
+		// Return to system menu after initiating connection
+		rg.handleWiFiMenuSelection("Back")
+	}
+}
+
+// handlePasswordInput handles password input UI interactions
+func (rg *RootScreen) handlePasswordInput() {
+	currentChar := rg.settingsWidget.GetCurrentChar()
+
+	switch currentChar {
+	case "<BACKSPACE>":
+		rg.settingsWidget.Backspace()
+	case "<SUBMIT>":
+		// Attempt to connect with the entered password
+		password := rg.settingsWidget.GetPasswordInput()
+		network := rg.settingsWidget.GetPasswordNetwork()
+
+		if password == "" {
+			rg.settingsWidget.SetConnectionStatus("Error: Password cannot be empty")
+			return
+		}
+
+		log.Printf("Attempting to connect to %s with password", network)
+		rg.settingsWidget.SetConnectionStatus("Connecting...")
+
+		go func() {
+			if err := settings.ConnectToWiFi(network, password); err != nil {
+				log.Printf("Failed to connect to WiFi: %v", err)
+				rg.settingsWidget.SetConnectionStatus("Error: Failed to connect")
+			} else {
+				log.Printf("Successfully connected to WiFi network: %s", network)
+				rg.settingsWidget.SetConnectionStatus("Connected successfully!")
+				// Return to system menu after a brief delay
+				// Note: In a real implementation, you might want to add a timer
+				// For now, user will need to manually go back
+			}
+		}()
+	case "<CANCEL>":
+		// Return to WiFi menu
+		items := settings.BuildWiFiMenuItems()
+		rg.settingsWidget.SetItems(items)
+		rg.settingsWidget.SetCurrentMenu(settings.WiFiMenu)
+	default:
+		// Add the selected character to the password
+		rg.settingsWidget.AddCharToPassword()
 	}
 }
 

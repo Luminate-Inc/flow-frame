@@ -13,7 +13,7 @@
 set -euo pipefail
 
 # Configuration
-RELEASE_ENDPOINT="https://luminateflow.ca/releases"
+RELEASE_ENDPOINT="https://luminateflow.ca/api/releases"
 BINARY_PATH="/usr/local/bin/flow-frame"
 BACKUP_PATH="/usr/local/bin/flow-frame.backup"
 TEMP_BINARY="/tmp/flow-frame-download-$$"
