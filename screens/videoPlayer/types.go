@@ -3,14 +3,15 @@ package videoPlayer
 import (
 	"time"
 
-	"flow-frame/pkg/mpeg"
+	"flow-frame/pkg/video"
+	"flow-frame/pkg/performance"
 	"flow-frame/pkg/sharedTypes"
 
 	"github.com/veandco/go-sdl2/sdl"
 )
 
 type VideoPlayerScreen struct {
-	player *mpeg.Player
+	player *video.Player
 	err    error
 
 	// Local video library information
@@ -27,6 +28,12 @@ type VideoPlayerScreen struct {
 	// Runtime state
 	currentVideo  int       // index of the currently playing video
 	playStartTime time.Time // wall-clock time when current video (loop) started
+
+	// Performance monitoring
+	perfMonitor            *performance.PerformanceMonitor // tracks decode/render performance
+	frameSkipper           *video.FrameSkipper              // adaptive frame skip logic
+	lastPerfLog            time.Time                       // last time performance was logged
+	lastMemoryLog          time.Time                       // last time memory was logged
 
 	// Background prefetching bookkeeping
 	prefetchResultCh chan prefetchResult // channel to receive async prefetch results

@@ -4,16 +4,50 @@ import (
 	"errors"
 	"log"
 	"os"
+	"runtime"
 	"time"
 
-	"flow-frame/pkg/mpeg"
+	"flow-frame/pkg/video"
+	"flow-frame/pkg/performance"
 	"flow-frame/pkg/sharedTypes"
 	"flow-frame/pkg/videoFs"
 
 	"github.com/veandco/go-sdl2/sdl"
 )
 
-const prefetchBuffer = 2 // number of videos to keep pre-downloaded
+// calculatePrefetchBuffer determines optimal prefetch count based on available memory
+// Conservative approach: only prefetch when we have sufficient RAM
+func calculatePrefetchBuffer() int {
+	memInfo := performance.GetSystemMemory()
+	availMB := memInfo.AvailableMB
+
+	// Very conservative thresholds for 2GB device
+	// Each video ~200MB, so be careful
+	switch {
+	case availMB < 400:
+		// Critical memory pressure - no prefetch
+		log.Printf("calculatePrefetchBuffer: Low memory (%dMB avail) - disabling prefetch", availMB)
+		return 0
+
+	case availMB < 700:
+		// Medium pressure - minimal prefetch
+		log.Printf("calculatePrefetchBuffer: Medium memory (%dMB avail) - prefetch 1 video", availMB)
+		return 1
+
+	case availMB < 1000:
+		// Comfortable - standard prefetch
+		return 2
+
+	default:
+		// Plenty of RAM - aggressive prefetch
+		return 3
+	}
+}
+
+// getPrefetchBuffer returns current prefetch buffer size (always recalculate for dynamic adjustment)
+func getPrefetchBuffer() int {
+	return calculatePrefetchBuffer()
+}
 
 // clearDownloadedVideos removes all video files from the assets/tmp directory
 func clearDownloadedVideos() {
@@ -59,7 +93,14 @@ func NewVideoPlayerScreen() *VideoPlayerScreen {
 	}
 
 	// Download initial videos from the first collection
-	initialVideos, endOfCollection, err := videoFs.DownloadSegmentFromS3(collections[0], 0, prefetchBuffer)
+	// Use dynamic prefetch based on available memory
+	initialPrefetch := getPrefetchBuffer()
+	if initialPrefetch == 0 {
+		initialPrefetch = 1 // Always download at least 1 video to start
+	}
+	log.Printf("NewVideoPlayerScreen: Initial prefetch count = %d", initialPrefetch)
+
+	initialVideos, endOfCollection, err := videoFs.DownloadSegmentFromS3(collections[0], 0, initialPrefetch)
 	if err != nil || len(initialVideos) == 0 {
 		// Fall back to checking whats pre existing
 		initialVideos, err = videoFs.AvailableDownloadedVideos()
@@ -71,7 +112,7 @@ func NewVideoPlayerScreen() *VideoPlayerScreen {
 		panic(err)
 	}
 
-	player, err := mpeg.NewPlayer(file)
+	player, err := video.NewPlayer(file)
 	if err != nil {
 		panic(err)
 	}
@@ -99,6 +140,8 @@ func NewVideoPlayerScreen() *VideoPlayerScreen {
 		nextS3Index:         nextS3Index,
 		currentVideo:        0,
 		playStartTime:       time.Now(),
+		perfMonitor:         performance.NewMonitor(120), // Track last 120 frames (2 seconds at 60fps)
+		frameSkipper:        video.NewFrameSkipper(),      // Adaptive frame skip logic
 		prefetchResultCh:    make(chan prefetchResult, 1),
 		prefetchPending:     false,
 		switchResultCh:      make(chan switchResult, 1),
@@ -112,6 +155,28 @@ func NewVideoPlayerScreen() *VideoPlayerScreen {
 // SetRenderer configures the SDL2 renderer for video rendering
 func (g *VideoPlayerScreen) SetRenderer(renderer *sdl.Renderer) error {
 	g.renderer = renderer
+
+	// Log renderer information for debugging
+	if renderer != nil {
+		info, err := renderer.GetInfo()
+		if err == nil {
+			isAccelerated := (info.Flags & sdl.RENDERER_ACCELERATED) != 0
+			hasVSync := (info.Flags & sdl.RENDERER_PRESENTVSYNC) != 0
+
+			accelStatus := "software"
+			if isAccelerated {
+				accelStatus = "hardware"
+			}
+
+			log.Printf("Renderer: %s (accelerated=%s, vsync=%v, maxTexture=%dx%d)",
+				info.Name, accelStatus, hasVSync,
+				info.MaxTextureWidth, info.MaxTextureHeight)
+		}
+
+		// Log initial memory state
+		performance.LogMemorySnapshot()
+	}
+
 	if g.player != nil {
 		return g.player.SetRenderer(renderer)
 	}
@@ -120,9 +185,25 @@ func (g *VideoPlayerScreen) SetRenderer(renderer *sdl.Renderer) error {
 
 // Update processes input and updates video playback state
 func (g *VideoPlayerScreen) Update(keyState []uint8) error {
-	// Update video decoding
-	if err := g.player.Update(); err != nil {
-		g.err = err
+	// Track total frame time
+	frameStart := time.Now()
+
+	// Get skip decision from frame skipper based on recent performance
+	decision := g.frameSkipper.ShouldDecode(g.perfMonitor.GetReport())
+
+	// Conditionally decode based on performance
+	if decision.ShouldDecode {
+		// Decode new frame
+		decodeStart := time.Now()
+		if err := g.player.Update(); err != nil {
+			g.err = err
+		}
+		decodeTime := time.Since(decodeStart)
+		g.perfMonitor.RecordFrameDecode(decodeTime)
+	} else {
+		// Skip decode - GPU will render last decoded frame
+		// This maintains smooth 60fps render with reduced decode rate
+		g.perfMonitor.RecordFrameDropped()
 	}
 
 	// Handle input - right arrow to skip to next video
@@ -139,6 +220,13 @@ func (g *VideoPlayerScreen) Update(keyState []uint8) error {
 
 	// Process collection switching
 	g.handleCollectionSwitching()
+
+	// Record total frame time (will add render time in Draw)
+	totalFrameTime := time.Since(frameStart)
+	g.perfMonitor.RecordTotalFrameTime(totalFrameTime)
+
+	// Log performance metrics periodically
+	g.logPerformanceMetrics()
 
 	if g.err != nil {
 		return g.err
@@ -214,7 +302,12 @@ func (g *VideoPlayerScreen) handleCollectionSwitching() {
 		log.Printf("Update: starting collection download for %s", g.collections[idx].Title)
 
 		go func(collection sharedTypes.Collection, collectionIdx int) {
-			vids, end, err := videoFs.DownloadSegmentFromS3(collection, 0, prefetchBuffer)
+			// Use dynamic prefetch for collection switch
+			prefetchCount := getPrefetchBuffer()
+			if prefetchCount == 0 {
+				prefetchCount = 1 // Always download at least 1 video
+			}
+			vids, end, err := videoFs.DownloadSegmentFromS3(collection, 0, prefetchCount)
 			g.switchResultCh <- switchResult{
 				vids:            vids,
 				endOfCollection: end,
@@ -249,10 +342,17 @@ func (g *VideoPlayerScreen) Draw(renderer *sdl.Renderer, screenWidth, screenHeig
 	if g.err != nil {
 		return g.err
 	}
+
+	// Track render time
+	renderStart := time.Now()
+	var err error
 	if g.player != nil {
-		return g.player.Draw(renderer, screenWidth, screenHeight)
+		err = g.player.Draw(renderer, screenWidth, screenHeight)
 	}
-	return nil
+	renderTime := time.Since(renderStart)
+	g.perfMonitor.RecordFrameRender(renderTime)
+
+	return err
 }
 
 // intervalToDuration converts interval strings to time.Duration
@@ -305,25 +405,47 @@ func (g *VideoPlayerScreen) nextVideo() {
 		return
 	}
 
+	// Reset frame skipper for new video (fresh performance profile)
+	g.frameSkipper.Reset()
+
 	// Start background prefetch for the next video
 	g.startPrefetch()
 }
 
 // cleanupCurrentVideo removes the currently playing video from disk and buffer
+// Performs aggressive cleanup to free memory immediately
 func (g *VideoPlayerScreen) cleanupCurrentVideo() {
 	playedPath := g.downloadedVideos[g.currentVideo]
 
-	// Close the current player
+	// Log memory before cleanup
+	memBefore := performance.GetSystemMemory()
+
+	// Close the current player (frees decoder resources)
 	if g.player != nil {
 		_ = g.player.Close()
+		g.player = nil // Ensure GC can collect
 	}
 
-	// Remove the video file
-	_ = os.Remove(playedPath)
+	// Remove the video file from disk
+	if err := os.Remove(playedPath); err != nil {
+		log.Printf("cleanupCurrentVideo: failed to remove %s: %v", playedPath, err)
+	} else {
+		log.Printf("cleanupCurrentVideo: removed %s", playedPath)
+	}
 
 	// Remove from buffer
 	g.downloadedVideos = append(g.downloadedVideos[:g.currentVideo], g.downloadedVideos[g.currentVideo+1:]...)
 	g.currentVideo = 0 // Always use index 0 after removal
+
+	// Hint to GC that now is a good time to run
+	// This is just a hint - GC will decide based on its own heuristics
+	runtime.GC()
+
+	// Log memory after cleanup
+	memAfter := performance.GetSystemMemory()
+	freed := int64(memAfter.AvailableMB) - int64(memBefore.AvailableMB)
+	log.Printf("cleanupCurrentVideo: freed ~%dMB (avail: %dMB → %dMB)",
+		freed, memBefore.AvailableMB, memAfter.AvailableMB)
 }
 
 // startNextVideo initializes playback of the next video in the buffer
@@ -336,7 +458,7 @@ func (g *VideoPlayerScreen) startNextVideo() error {
 		return err
 	}
 
-	newPlayer, err := mpeg.NewPlayer(file)
+	newPlayer, err := video.NewPlayer(file)
 	if err != nil {
 		return err
 	}
@@ -356,21 +478,51 @@ func (g *VideoPlayerScreen) startNextVideo() error {
 	g.player.Play()
 	g.playStartTime = time.Now()
 
+	// Log codec information for the new video
+	info := g.player.GetCodecInfo()
+	log.Printf("Video: %s | Codec: %s [HW=%v] | %dx%d @ %.1ffps",
+		nextPath, info.Name, info.IsHardwareAccel, info.Width, info.Height, info.FPS)
+
 	return nil
 }
 
 // startPrefetch begins background download of the next video
 func (g *VideoPlayerScreen) startPrefetch() {
-	missing := prefetchBuffer - len(g.downloadedVideos)
-	if missing <= 0 || g.prefetchPending {
+	if g.prefetchPending {
 		return
+	}
+
+	// Dynamic prefetch buffer based on current memory availability
+	targetBuffer := getPrefetchBuffer()
+	missing := targetBuffer - len(g.downloadedVideos)
+
+	if missing <= 0 {
+		return
+	}
+
+	// Check memory pressure before starting download
+	memInfo := performance.GetSystemMemory()
+	pressure := performance.GetMemoryPressure()
+
+	// Don't prefetch if memory is critical or high pressure
+	if pressure >= performance.MemoryPressureHigh {
+		log.Printf("startPrefetch: Skipping prefetch due to %s memory pressure (%dMB available)",
+			pressure.String(), memInfo.AvailableMB)
+		return
+	}
+
+	// Warn if downloading under medium pressure
+	if pressure == performance.MemoryPressureMedium {
+		log.Printf("startPrefetch: Prefetching %d video(s) under medium memory pressure (%dMB available)",
+			missing, memInfo.AvailableMB)
 	}
 
 	g.prefetchPending = true
 	collIdx := g.activeCollection
 	startIdx := g.nextS3Index
 
-	log.Printf("nextVideo: starting prefetch of %d video(s)", missing)
+	log.Printf("startPrefetch: Downloading %d video(s) [buffer=%d, avail=%dMB, pressure=%s]",
+		missing, targetBuffer, memInfo.AvailableMB, pressure.String())
 
 	go func(collection sharedTypes.Collection, collectionIdx, start, count int) {
 		vids, end, err := videoFs.DownloadSegmentFromS3(collection, start, count)
@@ -417,15 +569,23 @@ func (g *VideoPlayerScreen) Collections() []sharedTypes.Collection {
 func (g *VideoPlayerScreen) applyNewCollection(idx int, vids []string, endOfCollection bool) error {
 	log.Printf("applyNewCollection: switching to %s", g.collections[idx].Title)
 
+	// Log memory before cleanup
+	memBefore := performance.GetSystemMemory()
+
 	// Stop current playback
 	if g.player != nil {
 		_ = g.player.Close()
+		g.player = nil // Ensure GC can collect
 	}
 
-	// Clean up old videos
+	// Clean up old videos aggressively
+	removedCount := 0
 	for _, p := range g.downloadedVideos {
-		_ = os.Remove(p)
+		if err := os.Remove(p); err == nil {
+			removedCount++
+		}
 	}
+	log.Printf("applyNewCollection: removed %d old video(s)", removedCount)
 
 	// Update state with new collection
 	g.downloadedVideos = vids
@@ -444,7 +604,7 @@ func (g *VideoPlayerScreen) applyNewCollection(idx int, vids []string, endOfColl
 		return err
 	}
 
-	player, err := mpeg.NewPlayer(file)
+	player, err := video.NewPlayer(file)
 	if err != nil {
 		return err
 	}
@@ -463,7 +623,18 @@ func (g *VideoPlayerScreen) applyNewCollection(idx int, vids []string, endOfColl
 	g.playStartTime = time.Now()
 	g.player.Play()
 
-	log.Printf("applyNewCollection: switched to %s with %d videos", g.collections[idx].Title, len(vids))
+	// Reset frame skipper for new collection (fresh performance profile)
+	g.frameSkipper.Reset()
+
+	// Hint to GC to clean up old collection resources
+	runtime.GC()
+
+	// Log memory after collection switch
+	memAfter := performance.GetSystemMemory()
+	freed := int64(memAfter.AvailableMB) - int64(memBefore.AvailableMB)
+	log.Printf("applyNewCollection: switched to %s with %d videos, freed ~%dMB (avail: %dMB → %dMB)",
+		g.collections[idx].Title, len(vids), freed, memBefore.AvailableMB, memAfter.AvailableMB)
+
 	return nil
 }
 
@@ -480,4 +651,164 @@ func (g *VideoPlayerScreen) PlaybackInterval() string {
 // IsPrefetchPending returns whether a prefetch operation is currently in progress
 func (g *VideoPlayerScreen) IsPrefetchPending() bool {
 	return g.prefetchPending
+}
+
+// logPerformanceMetrics logs performance and memory stats periodically
+func (g *VideoPlayerScreen) logPerformanceMetrics() {
+	now := time.Now()
+
+	// Log performance stats every 5 seconds
+	if now.Sub(g.lastPerfLog) >= 5*time.Second {
+		report := g.perfMonitor.GetReport()
+		skipMode := g.frameSkipper.GetMode()
+
+		healthStatus := "OK"
+		if !report.IsHealthy {
+			healthStatus = "DEGRADED"
+		}
+		if g.perfMonitor.IsPerformanceDegrading() {
+			healthStatus = "WARNING"
+		}
+
+		log.Printf("Performance[%s]: Decode=%.2fms Render=%.2fms Total=%.2fms Frames=%d Drops=%d (%.1f%%) Mode=%s Uptime=%ds",
+			healthStatus,
+			report.AvgDecodeMs,
+			report.AvgRenderMs,
+			report.AvgTotalMs,
+			report.TotalFrames,
+			report.DroppedFrames,
+			report.DropRate,
+			skipMode.String(),
+			report.UptimeSeconds)
+
+		g.lastPerfLog = now
+	}
+
+	// Log memory stats every 10 seconds
+	if now.Sub(g.lastMemoryLog) >= 10*time.Second {
+		performance.LogMemorySnapshot()
+		g.lastMemoryLog = now
+	}
+}
+
+// GetPerformanceReport returns current performance metrics
+func (g *VideoPlayerScreen) GetPerformanceReport() performance.PerformanceReport {
+	return g.perfMonitor.GetReport()
+}
+
+// IsPerformanceDegrading returns true if performance is degrading
+func (g *VideoPlayerScreen) IsPerformanceDegrading() bool {
+	return g.perfMonitor.IsPerformanceDegrading()
+}
+
+// ResetPerformanceMetrics resets all performance tracking
+func (g *VideoPlayerScreen) ResetPerformanceMetrics() {
+	g.perfMonitor.Reset()
+	log.Printf("Performance metrics reset")
+}
+
+// GetFrameSkipMode returns the current frame skip mode
+func (g *VideoPlayerScreen) GetFrameSkipMode() video.SkipMode {
+	return g.frameSkipper.GetMode()
+}
+
+// GetFrameSkipStats returns current frame skipper statistics
+func (g *VideoPlayerScreen) GetFrameSkipStats() video.FrameSkipperStats {
+	return g.frameSkipper.GetStats()
+}
+
+// SetFrameSkipThresholds allows customizing frame skip performance thresholds
+// slowMs: decode time threshold for "slow" classification (default 30ms)
+// goodMs: decode time threshold for "good" classification (default 20ms)
+func (g *VideoPlayerScreen) SetFrameSkipThresholds(slowMs, goodMs float64) {
+	g.frameSkipper.SetThresholds(slowMs, goodMs)
+}
+
+// GetMemoryStatus returns current system memory status
+func (g *VideoPlayerScreen) GetMemoryStatus() performance.MemorySnapshot {
+	return performance.GetSystemMemory()
+}
+
+// GetMemoryPressure returns current memory pressure level
+func (g *VideoPlayerScreen) GetMemoryPressure() performance.MemoryPressureLevel {
+	return performance.GetMemoryPressure()
+}
+
+// GetPrefetchBufferSize returns the current dynamic prefetch buffer size
+func (g *VideoPlayerScreen) GetPrefetchBufferSize() int {
+	return getPrefetchBuffer()
+}
+
+// GetDownloadedVideoCount returns number of videos currently in buffer
+func (g *VideoPlayerScreen) GetDownloadedVideoCount() int {
+	return len(g.downloadedVideos)
+}
+
+// ForceGarbageCollection manually triggers garbage collection
+// Useful for testing or low-memory situations
+func (g *VideoPlayerScreen) ForceGarbageCollection() {
+	log.Printf("ForceGarbageCollection: Manually triggering GC")
+	memBefore := performance.GetSystemMemory()
+	runtime.GC()
+	memAfter := performance.GetSystemMemory()
+	freed := int64(memAfter.AvailableMB) - int64(memBefore.AvailableMB)
+	log.Printf("ForceGarbageCollection: freed ~%dMB (avail: %dMB → %dMB)",
+		freed, memBefore.AvailableMB, memAfter.AvailableMB)
+}
+
+// GetCodecInfo returns detailed information about the current video codec
+func (g *VideoPlayerScreen) GetCodecInfo() video.CodecInfo {
+	if g.player != nil {
+		return g.player.GetCodecInfo()
+	}
+	return video.CodecInfo{}
+}
+
+// IsHardwareAccelerated returns true if hardware decoding is active
+func (g *VideoPlayerScreen) IsHardwareAccelerated() bool {
+	if g.player != nil {
+		return g.player.IsHardwareAccelerated()
+	}
+	return false
+}
+
+// GetCodecRecommendation analyzes current codec and provides optimization recommendations
+func (g *VideoPlayerScreen) GetCodecRecommendation() video.CodecRecommendation {
+	if g.player != nil {
+		info := g.player.GetCodecInfo()
+		return video.AnalyzeCodec(info)
+	}
+	return video.CodecRecommendation{}
+}
+
+// LogCodecAnalysis logs detailed codec information and recommendations
+func (g *VideoPlayerScreen) LogCodecAnalysis() {
+	if g.player == nil {
+		log.Printf("LogCodecAnalysis: No player active")
+		return
+	}
+
+	info := g.player.GetCodecInfo()
+	rec := video.AnalyzeCodec(info)
+
+	log.Printf("=== Codec Analysis ===")
+	log.Printf("Current: %s [%s] %dx%d @ %.1ffps", info.Name, info.LongName, info.Width, info.Height, info.FPS)
+	log.Printf("Hardware Accel: %v", info.IsHardwareAccel)
+	log.Printf("Codec Type: %s", rec.CurrentType.String())
+	log.Printf("Optimal: %v", rec.IsOptimal)
+
+	if !rec.IsOptimal {
+		log.Printf("Recommendation: Switch to %s (%s)", rec.RecommendedCodec, rec.RecommendedType.String())
+		log.Printf("Reason: %s", rec.Reason)
+		if rec.ExpectedImprovement != "" {
+			log.Printf("Expected Improvement: %s", rec.ExpectedImprovement)
+		}
+		if rec.ReencodingCommand != "" {
+			log.Printf("Re-encoding Command:")
+			log.Printf("  %s", rec.ReencodingCommand)
+		}
+	} else {
+		log.Printf("Status: Optimal configuration for this device")
+	}
+	log.Printf("===================")
 }
