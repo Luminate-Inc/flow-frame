@@ -489,6 +489,7 @@ Main() {
 
             # Install Mesa + Panfrost drivers + SDL2 runtime libraries + FFmpeg + NetworkManager
             # Note: ffmpeg package automatically pulls in all required libav* libraries
+            # NetworkManager + dnsmasq are used for captive portal WiFi setup feature
             apt-get install -y \
                 mesa-utils \
                 mesa-vulkan-drivers \
@@ -502,7 +503,8 @@ Main() {
                 libsdl2-2.0-0 \
                 libsdl2-ttf-2.0-0 \
                 ffmpeg \
-                network-manager
+                network-manager \
+                dnsmasq
 
             echo "✓ Panfrost GPU support installed"
 

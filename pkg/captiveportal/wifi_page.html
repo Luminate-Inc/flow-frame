@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowFrame WiFi Setup</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 480px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #1a202c;
+            font-size: 28px;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #718096;
+            font-size: 14px;
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            color: #2d3748;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        select, input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+            background: white;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .network-option {
+            padding: 8px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 24px;
+            padding: 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status.show {
+            display: block;
+        }
+
+        .status.connecting {
+            background: #bee3f8;
+            color: #2c5282;
+            border: 2px solid #90cdf4;
+        }
+
+        .status.success {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 2px solid #9ae6b4;
+        }
+
+        .status.error {
+            background: #fed7d7;
+            color: #742a2a;
+            border: 2px solid #fc8181;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid currentColor;
+            border-right-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .refresh-btn {
+            background: #edf2f7;
+            color: #2d3748;
+            margin-bottom: 16px;
+            padding: 10px;
+            font-size: 14px;
+        }
+
+        .refresh-btn:hover:not(:disabled) {
+            background: #e2e8f0;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .password-toggle {
+            position: relative;
+        }
+
+        .password-toggle input {
+            padding-right: 45px;
+        }
+
+        .toggle-visibility {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: #718096;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>FlowFrame WiFi Setup</h1>
+        <p class="subtitle">Connect your device to WiFi</p>
+
+        <button id="refreshBtn" class="btn refresh-btn" onclick="scanNetworks()">
+            🔄 Refresh Networks
+        </button>
+
+        <form id="wifiForm" onsubmit="connectWiFi(event)">
+            <div class="form-group">
+                <label for="network">WiFi Network</label>
+                <select id="network" name="network" required>
+                    <option value="">Scanning...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <div class="password-toggle">
+                    <input type="password" id="password" name="password" placeholder="Leave blank for open networks">
+                    <button type="button" class="toggle-visibility" onclick="togglePassword()">Show</button>
+                </div>
+            </div>
+
+            <button type="submit" class="btn" id="connectBtn">Connect</button>
+        </form>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        let statusCheckInterval = null;
+        let countdownInterval = null;
+
+        // Scan networks on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            scanNetworks();
+        });
+
+        async function scanNetworks() {
+            const select = document.getElementById('network');
+            const refreshBtn = document.getElementById('refreshBtn');
+
+            select.innerHTML = '<option value="">Scanning...</option>';
+            select.disabled = true;
+            refreshBtn.disabled = true;
+
+            try {
+                const response = await fetch('/scan');
+                const networks = await response.json();
+
+                select.innerHTML = '<option value="">Select a network...</option>';
+
+                networks.forEach(network => {
+                    const option = document.createElement('option');
+                    option.value = network.ssid;
+                    option.dataset.isOpen = network.is_open;
+
+                    let label = network.ssid;
+                    if (network.is_open) {
+                        label += ' (Open)';
+                    }
+                    label += ` - ${network.signal}%`;
+
+                    option.textContent = label;
+                    option.className = 'network-option';
+                    select.appendChild(option);
+                });
+
+                select.disabled = false;
+                refreshBtn.disabled = false;
+            } catch (error) {
+                select.innerHTML = '<option value="">Error scanning networks</option>';
+                showStatus('error', 'Failed to scan networks. Please refresh.');
+                refreshBtn.disabled = false;
+            }
+        }
+
+        function togglePassword() {
+            const input = document.getElementById('password');
+            const btn = event.target;
+
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.textContent = 'Hide';
+            } else {
+                input.type = 'password';
+                btn.textContent = 'Show';
+            }
+        }
+
+        async function connectWiFi(event) {
+            event.preventDefault();
+
+            const select = document.getElementById('network');
+            const ssid = select.value;
+            const password = document.getElementById('password').value;
+            const connectBtn = document.getElementById('connectBtn');
+
+            if (!ssid) {
+                showStatus('error', 'Please select a network');
+                return;
+            }
+
+            // Check if network is open
+            const selectedOption = select.options[select.selectedIndex];
+            const isOpen = selectedOption.dataset.isOpen === 'true';
+
+            connectBtn.disabled = true;
+            showStatus('connecting', 'Connecting to ' + ssid + '...');
+
+            try {
+                const response = await fetch('/connect', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        ssid: ssid,
+                        password: password
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Connection request failed');
+                }
+
+                // Start checking status
+                startStatusChecking();
+            } catch (error) {
+                showStatus('error', 'Failed to start connection: ' + error.message);
+                connectBtn.disabled = false;
+            }
+        }
+
+        function startStatusChecking() {
+            // Clear any existing interval
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+
+            // Check status every second
+            statusCheckInterval = setInterval(checkStatus, 1000);
+        }
+
+        async function checkStatus() {
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    clearInterval(statusCheckInterval);
+                    showStatus('success', 'Successfully connected to ' + data.connected_to + '! Closing in 5 seconds...');
+
+                    // Start countdown
+                    let countdown = 5;
+                    countdownInterval = setInterval(() => {
+                        countdown--;
+                        if (countdown > 0) {
+                            showStatus('success', 'Successfully connected to ' + data.connected_to + '! Closing in ' + countdown + ' seconds...');
+                        } else {
+                            clearInterval(countdownInterval);
+                            window.close();
+                        }
+                    }, 1000);
+                } else if (data.status === 'error') {
+                    clearInterval(statusCheckInterval);
+                    showStatus('error', 'Connection failed: ' + data.error);
+                    document.getElementById('connectBtn').disabled = false;
+                }
+            } catch (error) {
+                console.error('Status check error:', error);
+            }
+        }
+
+        function showStatus(type, message) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = 'status show ' + type;
+
+            if (type === 'connecting') {
+                statusDiv.innerHTML = '<span class="loading"></span>' + message;
+            } else {
+                statusDiv.textContent = message;
+            }
+        }
+    </script>
+</body>
+</html>

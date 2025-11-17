@@ -1,11 +1,14 @@
 package root
 
 import (
+	"context"
+	"flow-frame/pkg/captiveportal"
 	"flow-frame/pkg/input"
 	"flow-frame/widgets/settings"
 	"flow-frame/screens/videoPlayer"
 	"flow-frame/ui"
 	"flow-frame/widgets/collections"
+	captiveportalwidget "flow-frame/widgets/captiveportal"
 	"flow-frame/widgets/tabs"
 
 	"github.com/veandco/go-sdl2/sdl"
@@ -25,6 +28,13 @@ type RootScreen struct {
 	collectionsWidget *collections.Widget
 	settingsWidget    *settings.Widget
 	popupVisible      bool
+
+	// Captive portal for WiFi setup
+	captivePortal       *captiveportal.Portal
+	captivePortalWidget *captiveportalwidget.Widget
+	showCaptivePortal   bool
+	wifiMonitorCtx      context.Context
+	wifiMonitorCancel   context.CancelFunc
 
 	// Persisted user preferences
 	settings settings.Settings

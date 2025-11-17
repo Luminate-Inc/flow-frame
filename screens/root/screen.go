@@ -1,15 +1,20 @@
 package root
 
 import (
+	"context"
+	"fmt"
+	"flow-frame/pkg/captiveportal"
 	"flow-frame/pkg/input"
 	"flow-frame/pkg/sharedTypes"
 	"flow-frame/screens/videoPlayer"
 	"flow-frame/ui"
 	"flow-frame/widgets/collections"
+	captiveportalwidget "flow-frame/widgets/captiveportal"
 	"flow-frame/widgets/settings"
 	"flow-frame/widgets/tabs"
 	"log"
 	"os/exec"
+	"time"
 
 	"github.com/veandco/go-sdl2/sdl"
 )
@@ -19,15 +24,21 @@ func NewRootScreen(window *sdl.Window, renderer *sdl.Renderer) *RootScreen {
 	// Load settings first
 	userSettings := settings.Load()
 
+	// Create context for WiFi monitor
+	ctx, cancel := context.WithCancel(context.Background())
+
 	// Create the root screen
 	rg := &RootScreen{
-		video:        videoPlayer.NewVideoPlayerScreen(),
-		window:       window,
-		renderer:     renderer,
-		popupVisible: false,
-		settings:     userSettings,
-		keyTracker:   input.NewKeyPressTracker(),
-		mouseTracker: input.NewMousePressTracker(),
+		video:             videoPlayer.NewVideoPlayerScreen(),
+		window:            window,
+		renderer:          renderer,
+		popupVisible:      false,
+		settings:          userSettings,
+		keyTracker:        input.NewKeyPressTracker(),
+		mouseTracker:      input.NewMousePressTracker(),
+		showCaptivePortal: false,
+		wifiMonitorCtx:    ctx,
+		wifiMonitorCancel: cancel,
 	}
 
 	// Initialize UI components
@@ -49,6 +60,9 @@ func NewRootScreen(window *sdl.Window, renderer *sdl.Renderer) *RootScreen {
 	// Apply loaded settings to video player
 	rg.video.SetPlaybackSpeed(userSettings.PlaybackSpeed)
 	rg.video.SetPlaybackInterval(userSettings.PlaybackInterval)
+
+	// Start WiFi monitoring in background
+	go rg.monitorWiFiConnection()
 
 	return rg
 }
@@ -174,8 +188,13 @@ func (rg *RootScreen) Draw() error {
 		return err
 	}
 
-	// Draw UI overlay if visible
-	if rg.popupVisible {
+	// Draw captive portal overlay if active (takes precedence over normal UI)
+	if rg.showCaptivePortal && rg.captivePortalWidget != nil {
+		if err := rg.captivePortalWidget.Render(rg.renderer, w, h, rg.fonts); err != nil {
+			log.Printf("Error rendering captive portal widget: %v", err)
+		}
+	} else if rg.popupVisible {
+		// Draw normal UI overlay if visible
 		if err := rg.drawUI(w, h); err != nil {
 			return err
 		}
@@ -552,7 +571,151 @@ func (rg *RootScreen) hideUI() {
 
 // Close cleans up resources
 func (rg *RootScreen) Close() {
+	// Stop WiFi monitor
+	if rg.wifiMonitorCancel != nil {
+		rg.wifiMonitorCancel()
+	}
+
+	// Stop and cleanup captive portal
+	if rg.captivePortal != nil {
+		if err := rg.captivePortal.Stop(); err != nil {
+			log.Printf("Error stopping captive portal: %v", err)
+		}
+	}
+
+	// Cleanup captive portal widget
+	if rg.captivePortalWidget != nil {
+		rg.captivePortalWidget.Destroy()
+	}
+
+	// Close fonts
 	if rg.fonts != nil {
 		rg.fonts.Close()
 	}
+}
+
+// monitorWiFiConnection monitors WiFi connection status and manages captive portal
+func (rg *RootScreen) monitorWiFiConnection() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	// Check immediately on startup
+	rg.checkAndManageCaptivePortal()
+
+	for {
+		select {
+		case <-ticker.C:
+			rg.checkAndManageCaptivePortal()
+		case <-rg.wifiMonitorCtx.Done():
+			log.Println("WiFi monitor stopped")
+			return
+		}
+	}
+}
+
+// checkAndManageCaptivePortal checks WiFi status and starts/stops captive portal accordingly
+func (rg *RootScreen) checkAndManageCaptivePortal() {
+	connected, ssid, err := captiveportal.CheckWiFiConnection()
+	if err != nil {
+		log.Printf("Error checking WiFi connection: %v", err)
+		return
+	}
+
+	if connected {
+		// WiFi is connected
+		if ssid != "" {
+			log.Printf("WiFi connected to: %s", ssid)
+		}
+
+		// Stop captive portal if it's running
+		if rg.captivePortal != nil && rg.captivePortal.IsRunning() {
+			log.Println("WiFi connected, stopping captive portal")
+			if err := rg.stopCaptivePortal(); err != nil {
+				log.Printf("Error stopping captive portal: %v", err)
+			}
+		}
+	} else {
+		// No WiFi connection
+		log.Println("No WiFi connection detected")
+
+		// Start captive portal if it's not running
+		if rg.captivePortal == nil || !rg.captivePortal.IsRunning() {
+			log.Println("Starting captive portal for WiFi setup")
+			if err := rg.startCaptivePortal(); err != nil {
+				log.Printf("Error starting captive portal: %v", err)
+			}
+		}
+	}
+}
+
+// startCaptivePortal initializes and starts the captive portal
+func (rg *RootScreen) startCaptivePortal() error {
+	// Create portal if it doesn't exist
+	if rg.captivePortal == nil {
+		portal, err := captiveportal.NewPortal()
+		if err != nil {
+			return fmt.Errorf("failed to create captive portal: %w", err)
+		}
+		rg.captivePortal = portal
+
+		// Set callback for successful WiFi connection
+		rg.captivePortal.SetOnConnectCallback(func() {
+			log.Println("WiFi connection callback triggered")
+			// Portal will be stopped by the monitor when it detects connection
+		})
+	}
+
+	// Start the portal
+	if err := rg.captivePortal.Start(); err != nil {
+		return fmt.Errorf("failed to start captive portal: %w", err)
+	}
+
+	// Get QR code
+	qrPNG, err := rg.captivePortal.GetQRCodePNG()
+	if err != nil {
+		rg.captivePortal.Stop()
+		return fmt.Errorf("failed to get QR code: %w", err)
+	}
+
+	// Create captive portal widget
+	widget, err := captiveportalwidget.NewWidget(
+		rg.renderer,
+		qrPNG,
+		rg.captivePortal.GetSSID(),
+		rg.captivePortal.GetURL(),
+	)
+	if err != nil {
+		rg.captivePortal.Stop()
+		return fmt.Errorf("failed to create captive portal widget: %w", err)
+	}
+
+	// Cleanup old widget if exists
+	if rg.captivePortalWidget != nil {
+		rg.captivePortalWidget.Destroy()
+	}
+
+	rg.captivePortalWidget = widget
+	rg.showCaptivePortal = true
+
+	log.Printf("Captive portal started: SSID=%s, URL=%s", rg.captivePortal.GetSSID(), rg.captivePortal.GetURL())
+	return nil
+}
+
+// stopCaptivePortal stops the captive portal and hides the widget
+func (rg *RootScreen) stopCaptivePortal() error {
+	rg.showCaptivePortal = false
+
+	if rg.captivePortalWidget != nil {
+		rg.captivePortalWidget.Destroy()
+		rg.captivePortalWidget = nil
+	}
+
+	if rg.captivePortal != nil {
+		if err := rg.captivePortal.Stop(); err != nil {
+			return err
+		}
+	}
+
+	log.Println("Captive portal stopped")
+	return nil
 }
