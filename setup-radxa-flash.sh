@@ -23,7 +23,6 @@ detect_and_delegate_to_lima() {
     if [ -f "/.lima-vm" ] || [ -n "${LIMA_INSTANCE:-}" ]; then
         return 0
     fi
-
     # Only delegate on macOS
     if [[ "$(uname -s)" != "Darwin" ]]; then
         return 0
@@ -570,6 +569,12 @@ SUDOERS
             systemctl enable NetworkManager
             systemctl start NetworkManager || echo "ℹ NetworkManager will start on first boot"
             echo "✓ NetworkManager enabled and configured"
+
+            # Disable standalone dnsmasq service (NetworkManager will manage it when needed)
+            echo "=== Configuring dnsmasq ==="
+            systemctl disable dnsmasq.service || echo "ℹ dnsmasq service already disabled"
+            systemctl stop dnsmasq.service 2>/dev/null || echo "ℹ dnsmasq service not running"
+            echo "✓ dnsmasq standalone service disabled (NetworkManager will use dnsmasq binary as needed)"
 
             # Create shared environment file with APP_VERSION
             echo "=== Creating shared environment file ==="

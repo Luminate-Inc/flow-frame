@@ -232,10 +232,10 @@ func connectToWiFi(ssid, password string) error {
 
 	if password == "" {
 		// Connect to open network
-		cmd = exec.Command("sudo", "nmcli", "dev", "wifi", "connect", ssid)
+		cmd = exec.Command("nmcli", "dev", "wifi", "connect", ssid)
 	} else {
 		// Connect to secured network
-		cmd = exec.Command("sudo", "nmcli", "dev", "wifi", "connect", ssid, "password", password)
+		cmd = exec.Command("nmcli", "dev", "wifi", "connect", ssid, "password", password)
 	}
 
 	output, err := cmd.CombinedOutput()
@@ -243,5 +243,6 @@ func connectToWiFi(ssid, password string) error {
 		return fmt.Errorf("failed to connect to %s: %w (output: %s)", ssid, err, string(output))
 	}
 
+	log.Printf("Successfully initiated connection to %s", ssid)
 	return nil
 }

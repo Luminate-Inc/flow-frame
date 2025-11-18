@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/skip2/go-qrcode"
 )
@@ -53,14 +54,19 @@ func (p *Portal) Start() error {
 	p.wifiInterface = iface
 	log.Printf("Detected WiFi interface: %s", iface)
 
-	// Step 2: Create access point
+	// Step 2: Validate AP mode support
+	if err := validateAPSupport(iface); err != nil {
+		log.Printf("Warning: %v", err)
+	}
+
+	// Step 3: Create access point
 	log.Printf("Creating access point '%s' on interface %s", p.apSSID, iface)
 	if err := createAP(iface, p.apName, p.apSSID, p.apIP); err != nil {
 		return fmt.Errorf("failed to create access point: %w", err)
 	}
 	log.Printf("Access point created successfully")
 
-	// Step 3: Generate QR code
+	// Step 4: Generate QR code
 	url := fmt.Sprintf("http://%s:%d", p.apIP, p.apPort)
 	qrCode, err := qrcode.Encode(url, qrcode.Medium, 200)
 	if err != nil {
@@ -71,7 +77,7 @@ func (p *Portal) Start() error {
 	p.qrCodeData = qrCode
 	log.Printf("QR code generated for: %s", url)
 
-	// Step 4: Start web server
+	// Step 5: Start web server
 	p.server = NewWebServer(p.apIP, p.apPort, p.handleWiFiConnect)
 	if err := p.server.Start(); err != nil {
 		// Cleanup AP on failure
@@ -162,14 +168,28 @@ func (p *Portal) handleWiFiConnect(ssid, password string) error {
 		return err
 	}
 
-	// Connection successful, trigger callback if set
-	p.mu.RLock()
-	callback := p.onConnectCallback
-	p.mu.RUnlock()
+	log.Printf("WiFi connection to %s successful", ssid)
 
-	if callback != nil {
-		go callback()
-	}
+	// Schedule delayed shutdown of captive portal
+	// This gives the client time to see the success status before AP goes down
+	go func() {
+		log.Println("Scheduling captive portal shutdown in 10 seconds...")
+		time.Sleep(10 * time.Second)
+
+		log.Println("Stopping captive portal after successful WiFi connection")
+		if err := p.Stop(); err != nil {
+			log.Printf("Error stopping captive portal: %v", err)
+		}
+
+		// Trigger callback after shutdown
+		p.mu.RLock()
+		callback := p.onConnectCallback
+		p.mu.RUnlock()
+
+		if callback != nil {
+			callback()
+		}
+	}()
 
 	return nil
 }
