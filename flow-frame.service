@@ -17,8 +17,7 @@ EnvironmentFile=/opt/flowframe/.env
 
 Environment="GAME_TITLE=FLOW FRAME"
 Environment="AWS_DEFAULT_REGION=us-east-2"
-Environment="AWS_ACCESS_KEY_ID=AKIATV3TWTVMKTTDPAEK"
-Environment="AWS_SECRET_ACCESS_KEY=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"
+# AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are loaded from EnvironmentFile above
 Environment="VIDEO_DECODER=kmsdrm"
 Environment="ART_FRAME_S3_BUCKET=software-releases"
 Environment="FORCE_SOFTWARE_DECODER=0"
